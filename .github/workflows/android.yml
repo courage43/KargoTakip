@@ -11,6 +11,13 @@ on:
     branches: [master, main]
     paths: ["apps/kurye/**", "packages/shared/**", ".github/workflows/android.yml", "pnpm-lock.yaml"]
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Sunucu adresi (boşsa repo variable VITE_API_URL kullanılır), örn. https://dagitim.odaadi.org.tr"
+        required: false
+      realtime_url:
+        description: "Canlı servis adresi (boşsa repo variable VITE_REALTIME_URL)"
+        required: false
 
 jobs:
   build:
@@ -31,10 +38,11 @@ jobs:
       - name: Web paketini derle
         working-directory: apps/kurye
         env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-          VITE_REALTIME_URL: ${{ vars.VITE_REALTIME_URL }}
+          VITE_API_URL: ${{ inputs.api_url || vars.VITE_API_URL }}
+          VITE_REALTIME_URL: ${{ inputs.realtime_url || vars.VITE_REALTIME_URL }}
         run: |
-          test -n "$VITE_API_URL" || { echo "VITE_API_URL repo variable tanımlı değil"; exit 1; }
+          test -n "$VITE_API_URL" || { echo "::error::VITE_API_URL tanımlı değil. Settings → Secrets and variables → Actions → Variables altına VITE_API_URL ve VITE_REALTIME_URL ekleyin veya iş akışını elle çalıştırırken adres girin."; exit 1; }
+          echo "API: $VITE_API_URL"
           pnpm build
       - name: google-services.json (varsa)
         if: env.HAS_GOOGLE_SERVICES == 'true'
