@@ -3,6 +3,7 @@ import { yayinla } from "@/lib/notify";
 import { json, options, kuryeGerekli } from "@/lib/api";
 import { kampanyaSmsKuyrukla, isleyiciTetikle } from "@/lib/sms/kuyruk";
 import { smsAyarlari } from "@/lib/sms";
+import { rotaOzetiHesapla } from "@/lib/bakim";
 
 export const OPTIONS = options;
 
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
   if (b.islem === "bitir") {
     if (acik) {
       await prisma.route.update({ where: { id: acik.id }, data: { bitis: new Date() } });
+      await rotaOzetiHesapla(acik.id);
       await prisma.shipment.updateMany({ where: { assignedCourierId: o.sub, durum: "YOLDA" }, data: { durum: "ATANDI", sonDurumAt: new Date() } });
       await yayinla("route", { tip: "bitis", courierId: o.sub, ad: o.ad, companyId: o.companyId, campaignId: acik.campaignId });
     }

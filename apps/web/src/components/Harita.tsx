@@ -10,7 +10,9 @@ export interface Nokta {
   etiket?: string;
   href?: string;
   secili?: boolean;
-  tip?: "gonderi" | "kurye" | "adres" | "aday";
+  tip?: "gonderi" | "kurye" | "adres" | "aday" | "iz";
+  /** Geocode ile tahmin edilmiş konum: yarı saydam, kesikli kenar */
+  tahmini?: boolean;
 }
 
 export interface HaritaProps {
@@ -99,6 +101,10 @@ export function Harita({ noktalar, yukseklik = 420, merkez, zoom, suruklenebilir
         const m = L.marker([n.lat, n.lng], { icon, draggable: n.id === suruklenebilirId });
         if (n.id === suruklenebilirId) m.on("dragend", () => { const p = m.getLatLng(); cb.current.onSurukle?.(n.id, p.lat, p.lng); });
         layer = m;
+      } else if (n.tip === "iz") {
+        layer = L.circleMarker([n.lat, n.lng], { radius: 3, color: renk, weight: 1, fillColor: renk, fillOpacity: 0.7 });
+      } else if (n.tahmini) {
+        layer = L.circleMarker([n.lat, n.lng], { radius: n.secili ? 9 : 6, color: n.secili ? "#111827" : renk, weight: n.secili ? 3 : 1.5, dashArray: "3 2", fillColor: renk, fillOpacity: 0.3 });
       } else {
         layer = L.circleMarker([n.lat, n.lng], { radius: n.secili ? 9 : 6, color: n.secili ? "#111827" : "#fff", weight: n.secili ? 3 : 1, fillColor: renk, fillOpacity: 0.95 });
       }

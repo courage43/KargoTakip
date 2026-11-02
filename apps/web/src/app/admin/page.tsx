@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { kampanyaOzeti } from "@/lib/campaign";
 import { yuzde, tarih } from "@/lib/format";
 import { KAMPANYA_DURUMU_ETIKET } from "@dagitim/shared";
+import { uyarilariGetir } from "@/lib/uyarilar";
 
 export default async function Pano() {
   const [uyeSayisi, aktifUye, dogrulanmis, kampanyalar, sonYukleme] = await Promise.all([
@@ -12,13 +13,28 @@ export default async function Pano() {
     prisma.campaign.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: { courierCompany: true } }),
     prisma.importBatch.findFirst({ where: { tur: "GENEL_LISTE", durum: "TAMAMLANDI" }, orderBy: { createdAt: "desc" } }),
   ]);
-  const ozetler = await Promise.all(kampanyalar.map((k) => kampanyaOzeti(k.id)));
+  const [ozetler, uyarilar, adresBekleyen, cakisma, tahmini] = await Promise.all([
+    Promise.all(kampanyalar.map((k) => kampanyaOzeti(k.id))),
+    uyarilariGetir({ gun: 1 }).catch(() => []),
+    prisma.addressChangeRequest.count({ where: { karar: "BEKLIYOR" } }),
+    prisma.memberAddress.count({ where: { konumDurumu: "CAKISMA_BEKLIYOR" } }),
+    prisma.memberAddress.count({ where: { gecerlilikBitis: null, konumDurumu: "TAHMINI" } }),
+  ]);
+  const dikkat = uyarilar.length + adresBekleyen + cakisma;
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Pano</h1>
+      {dikkat > 0 && (
+        <div className="card p-4 border-amber-300 bg-amber-50 text-sm flex flex-wrap gap-4 items-center">
+          <span className="font-semibold">Dikkat gerektiren:</span>
+          {uyarilar.length > 0 && <Link className="underline" href="/admin/uyarilar">{uyarilar.length} saha uyarısı (son 24 saat)</Link>}
+          {adresBekleyen > 0 && <Link className="underline" href="/admin/adres-degisiklikleri">{adresBekleyen} adres değişikliği</Link>}
+          {cakisma > 0 && <Link className="underline" href="/admin/konum-cakismalari">{cakisma} konum çakışması</Link>}
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Kart etiket="Toplam üye" deger={uyeSayisi} alt={`${aktifUye} aktif`} />
-        <Kart etiket="Doğrulanmış konum" deger={dogrulanmis} alt={`üye adreslerinin %${yuzde(dogrulanmis, aktifUye)}`} />
+        <Kart etiket="Doğrulanmış konum" deger={dogrulanmis} alt={`%${yuzde(dogrulanmis, aktifUye)} · ${tahmini} tahmini`} />
         <Kart etiket="Son üye listesi" deger={sonYukleme ? tarih(sonYukleme.createdAt, false) : "-"} alt={sonYukleme ? `${sonYukleme.satirSayisi} satır` : "henüz yüklenmedi"} />
         <Kart etiket="Dağıtım sayısı" deger={kampanyalar.length} alt={<Link className="underline" href="/admin/dagitimlar/yeni">yeni dağıtım</Link>} />
       </div>

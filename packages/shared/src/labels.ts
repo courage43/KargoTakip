@@ -88,3 +88,27 @@ export const ADRES_KARAR_ETIKET: Record<string, string> = {
 export const KONUM_CAKISMA_ESIGI_M = 150;
 /** Anomali: teslimat GPS'i adres konumundan bu kadar uzaksa uyarı */
 export const UZAK_TESLIM_ESIGI_M = 300;
+/** Rota açıkken bu kadar dakika konum gelmezse "hareketsiz" uyarısı */
+export const HAREKETSIZ_DK = 45;
+/** Bu kadar saatten uzun açık kalan rota otomatik kapatılır */
+export const UZUN_ROTA_SAAT = 14;
+/** Ham konum izleri bu kadar gün saklanır (Route özetleri kalır) */
+export const KONUM_SAKLAMA_GUN = 90;
+/** Ardışık iki deneme arası bu kadar saniyeden kısa ve mesafe eşiğinden uzaksa "çok hızlı" uyarısı */
+export const HIZLI_DENEME_SN = 60;
+export const HIZLI_DENEME_M = 500;
+
+export const GEO_KALITE_ETIKET: Record<string, string> = {
+  ADRES: "Bina düzeyinde",
+  SOKAK: "Sokak düzeyinde",
+  MAHALLE: "Mahalle düzeyinde",
+  ILCE: "İlçe düzeyinde",
+};
+
+export const UYARI_TURU_ETIKET: Record<string, string> = {
+  HAREKETSIZ: "Hareketsiz kurye",
+  UZUN_ROTA: "Uzun süre açık rota",
+  UZAK_TESLIM: "Adresten uzakta teslimat",
+  GPSSIZ: "GPS'siz teslimat kaydı",
+  HIZLI: "Şüpheli hızlı teslimat",
+};

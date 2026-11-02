@@ -34,6 +34,8 @@ services:
       STORAGE_DIR: /data/storage
       ODA_ADI: ${ODA_ADI:-Ticaret Odası}
       GEOCODING_API_KEY: ${GEOCODING_API_KEY:-}
+      GEOCODE_SAGLAYICI: ${GEOCODE_SAGLAYICI:-nominatim}
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-dagitim-takip/1.0}
       SMS_SAGLAYICI: ${SMS_SAGLAYICI:-sahte}
       NETGSM_USERCODE: ${NETGSM_USERCODE:-}
       NETGSM_PASSWORD: ${NETGSM_PASSWORD:-}
@@ -80,7 +82,7 @@ services:
       - caddy_config:/config
     depends_on: [web, realtime, kurye]
 
-  # Dakikada bir SMS kuyruğunu işler ve teslim raporlarını çeker
+  # Dakikada bir: SMS kuyruğu + teslim raporu, geocode kuyruğu, uzun rota kapatma, eski konum temizliği
   cron:
     image: curlimages/curl:8.11.1
     restart: unless-stopped
@@ -91,7 +93,7 @@ services:
     command:
       - |
         while true; do
-          curl -sS -m 120 "http://web:3000/api/cron/sms?key=$$CRON_KEY" || true
+          curl -sS -m 300 "http://web:3000/api/cron/bakim?key=$$CRON_KEY" || true
           echo
           sleep 60
         done

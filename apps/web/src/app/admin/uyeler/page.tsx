@@ -2,6 +2,9 @@ import Link from "next/link";
 import { prisma, type Prisma } from "@/lib/db";
 import { KonumRozeti } from "@/components/DurumRozeti";
 import { telefonGoster } from "@/lib/format";
+import { GeocodeDurumu } from "@/components/GeocodeDurumu";
+import { geocodeOzeti, geocodeCalisiyor } from "@/lib/geocode/kuyruk";
+import { geocodeSaglayiciAdi } from "@/lib/geocode";
 
 export default async function Uyeler({ searchParams }: { searchParams: Promise<{ q?: string; sayfa?: string; konum?: string; aktif?: string }> }) {
   const sp = await searchParams;
@@ -16,12 +19,14 @@ export default async function Uyeler({ searchParams }: { searchParams: Promise<{
     prisma.member.findMany({ where, orderBy: { unvan: "asc" }, skip: (sayfa - 1) * 50, take: 50, include: { addresses: { where: { gecerlilikBitis: null } } } }),
   ]);
   const sayfaSayisi = Math.ceil(toplam / 50);
+  const geo = await geocodeOzeti();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Üyeler <span className="text-base text-gray-500 font-normal">({toplam})</span></h1>
         <Link href="/admin/uyeler/yukle" className="btn-primary">Üye listesi yükle</Link>
       </div>
+      <GeocodeDurumu ilk={{ ...geo, calisiyor: geocodeCalisiyor(), saglayici: geocodeSaglayiciAdi() }} />
       <form className="card p-3 flex flex-wrap gap-2 items-end">
         <div className="flex-1 min-w-60"><label className="label">Ara</label><input name="q" defaultValue={q} className="input" placeholder="Sicil, unvan, adres…" /></div>
         <div><label className="label">Konum</label>

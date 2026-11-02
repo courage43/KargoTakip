@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { oturumAl } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { exceleYaz } from "@dagitim/excel";
+import { kampanyaHakedis } from "@/lib/campaign";
 import { GONDERI_DURUMU_ETIKET, UYE_TERCIHI_ETIKET, TESLIM_ALAN_ETIKET } from "@dagitim/shared";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +23,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }; });
   const bulunamayan = satirlar.filter((s) => ["Adreste Bulunamadı", "Adres Hatalı", "Taşınmış"].includes(s["Durum"]));
   const kuryeOzet = Object.values(g.reduce<Record<string, { Kurye: string; Atanan: number; Teslim: number; Başarısız: number }>>((acc, x) => { const ad = x.assignedCourier?.adSoyad ?? "Atanmamış"; acc[ad] ??= { Kurye: ad, Atanan: 0, Teslim: 0, Başarısız: 0 }; acc[ad].Atanan++; if (["TESLIM_EDILDI", "KOMSUYA_BIRAKILDI", "ISYERINE_BIRAKILDI"].includes(x.durum)) acc[ad].Teslim++; if (["ADRESTE_BULUNAMADI", "ADRES_HATALI", "TASINMIS"].includes(x.durum)) acc[ad].Başarısız++; return acc; }, {}));
-  const buf = exceleYaz([{ ad: "Sonuç", satirlar }, { ad: "Bulunamayanlar", satirlar: bulunamayan.length ? bulunamayan : [{ Bilgi: "Yok" }] }, { ad: "Kurye Özeti", satirlar: kuryeOzet }]);
+  const hakedis = await kampanyaHakedis(id, o.rol === "KURYE_FIRMA_YONETICI" ? o.companyId : null);
+  const hakedisSatirlar = hakedis.map((h) => ({ "Kurye": h.kurye, "Gün": h.gun, "Teslim": h.teslim, "Başarısız": h.basarisiz, "Deneme": h.deneme, "İlk": h.ilk ? h.ilk.toLocaleTimeString("tr-TR") : "", "Son": h.son ? h.son.toLocaleTimeString("tr-TR") : "", "Rota km": h.rotaKm ?? "" }));
+  const buf = exceleYaz([{ ad: "Sonuç", satirlar }, { ad: "Bulunamayanlar", satirlar: bulunamayan.length ? bulunamayan : [{ Bilgi: "Yok" }] }, { ad: "Kurye Özeti", satirlar: kuryeOzet }, { ad: "Hakediş", satirlar: hakedisSatirlar.length ? hakedisSatirlar : [{ Bilgi: "Henüz teslimat yok" }] }]);
   return new NextResponse(new Uint8Array(buf), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${encodeURIComponent(k.ad)}-sonuc.xlsx"` } });
 }

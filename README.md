@@ -71,13 +71,17 @@ node tools/e2e.mjs /tmp                                 # uçtan uca akış (web
 
 **SMS** → Dağıtım aktif olunca SMS kartında "Üyelere tercih SMS'i gönder". Cep telefonu olmayan üyeler atlanır, her gönderiye bir kez gider. Mesajdaki link üyeyi `/t/{token}` tercih sayfasına götürür. Ayarlar'da "kurye yolda" açıksa kurye "Rotaya başla" dediğinde o günkü üyelere ikinci SMS gider.
 
+**Konum tahmini** → Üyeler sayfasında "Konumu olmayan N adresi tahmin et". Önbellek sayesinde aynı adres bir daha sorgulanmaz. Bulunamayanlar 3 denemeden sonra durur, "yeniden dene" ile sıfırlanır.
+
+**Rotalar ve uyarılar** → `/admin/rotalar` liste, satıra tıklayınca iz + oynatıcı. `/admin/uyarilar` saha anomalileri; her satırda ilgili gönderi/rota linki ve "İncelendi".
+
 **Canlı takip** → kurye "Rotaya başla" dediği sürece 30 sn'de bir konum gönderir; `/admin/canli` ve dağıtım sayfasındaki harita canlı güncellenir. Rota kapalıyken konum alınmaz.
 
 ## Fazlar
 
 - **Faz 1 (bu sürüm):** yukarıdakilerin hepsi + çevrimdışı kurye kuyruğu + Excel dışa aktarım + denetim kaydı.
 - **Faz 2a (bu sürüm):** SMS bildirimi. Dağıtım sayfasındaki SMS kartından üyelere tercih linki gönderilir; isteğe bağlı "kurye yolda" SMS'i; SMS listesi, teslim raporu, Excel. Sağlayıcı `SMS_SAGLAYICI=netgsm` + `NETGSM_USERCODE/PASSWORD` ile Netgsm, varsayılan `sahte` (gerçek gönderim yapmaz, test için). Başlık ve şablonlar Ayarlar > SMS'te. `cron` servisi dakikada bir kuyruğu işler.
-- **Faz 2b:** adres metninden ilk konum tahmini (geocoding), rota izi / gün sonu oynatma, anomali listesi.
+- **Faz 2b (bu sürüm):** **Konum tahmini**: Üyeler sayfasındaki düğme veya `cron` ile konumu olmayan adresler geocode edilir (`GEOCODE_SAGLAYICI=nominatim` ücretsiz, `google` hızlı/ücretli). Tahmini konumlar haritada kesikli daire; kurye navigasyonu yine adres metnine gider, GPS ile doğrulanınca dolu daire olur. **Rotalar**: her "Rotaya başla/bitir" bir rota; km, konum ve deneme sayısı; harita üzerinde iz ve zaman kaydırıcılı oynatma. **Uyarılar**: hareketsiz kurye (45 dk), 14 saatten uzun açık rota (otomatik kapanır), doğrulanmış adresten 300 m uzakta teslim, GPS'siz kayıt, şüpheli hızlı teslimat; "incelendi" ile düşer. **Hakediş**: dağıtım sayfası ve Excel'de kurye × gün tablosu (teslim, başarısız, deneme, ilk/son saat, rota km). 90 günden eski ham konum izleri silinir.
 - **Faz 3:** Capacitor ile Play Store / App Store paketi (arka planda konum), push bildirimi, rota sıralama, zarf barkodu.
 
 ## Notlar

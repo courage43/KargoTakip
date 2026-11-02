@@ -59,6 +59,17 @@ let b1b = await genelListeYukle(path.join(D, "uyeler-5000.xlsx"));
 assert.equal(b1b.eklenen, 0); assert.equal(b1b.guncellenen, 5000); assert.equal(b1b.adresDegisen, 0);
 log("tekrar yükleme: 0 yeni, 0 adres değişikliği");
 
+// --- 1c. Geocoding (sahte sağlayıcı) ---
+assert.equal((await fetch(`${WEB}/api/cron/geocode?key=yanlis`)).status, 401);
+let geoToplam = 0;
+for (let i = 0; i < 100; i++) { const r = await (await fetch(`${WEB}/api/cron/geocode?key=test-cron-key&limit=500`)).json(); geoToplam += r.bulunan; if (r.islenen === 0) break; }
+assert.equal((await q(`select count(*)::int c from "MemberAddress" where "gecerlilikBitis" is null and "konumDurumu"='TAHMINI'`))[0].c, 5000);
+assert.equal((await q(`select count(*)::int c from "GeocodeCache"`))[0].c, (await q(`select count(distinct "adresNormalize")::int c from "MemberAddress"`))[0].c);
+assert.equal((await q(`select count(*)::int c from "MemberAddress" where "geoSource"='GEOCODE_TAHMIN' and "geoKalite"='SOKAK'`))[0].c, 5000);
+const tekrarGeo = await (await fetch(`${WEB}/api/cron/geocode?key=test-cron-key`)).json();
+assert.equal(tekrarGeo.islenen, 0, "ikinci çağrıda işlenecek adres kalmamalı");
+log(`geocode: ${geoToplam} adres TAHMINI oldu, önbellek dolu, ikinci tur boş`);
+
 // --- 2. Kampanya + dağıtım listesi ---
 await ap.goto(`${WEB}/admin/dagitimlar/yeni`);
 await ap.fill("input[name=ad]", "Test Dağıtımı");
@@ -207,9 +218,19 @@ const yetkisiz = await api("/api/kurye/denemeler", { shipmentId: g1.id, istemciI
 assert.equal(yetkisiz.status, 400); assert.match(yetkisiz.data.hata, /atanmamış/);
 assert.equal((await api("/api/kurye/gonderiler")).status, 401);
 log("yetki: başka kuryenin gönderisi reddedildi, tokensiz 401");
+await api("/api/kurye/konum", { lat: 40.992, lng: 29.032, accuracyM: 10 }, tok);
+await api("/api/kurye/konum", { lat: 40.995, lng: 29.035, accuracyM: 10 }, tok);
 await api("/api/kurye/rota", { islem: "bitir" }, tok);
 assert.equal((await api("/api/kurye/konum", { lat: 1, lng: 1 }, tok)).data.rotaAcik, false);
-log("rota bitti, konum artık yazılmıyor");
+const rota1 = (await q(`select * from "Route" where "courierId"=$1 and bitis is not null order by baslangic desc limit 1`, [ahmet]))[0];
+assert.equal(rota1.noktaSayisi, 3); assert.ok(rota1.mesafeM > 400 && rota1.mesafeM < 1200, `mesafe ${rota1.mesafeM}`); assert.ok(rota1.denemeSayisi >= 5, `deneme ${rota1.denemeSayisi}`);
+log(`rota bitti: özet ${rota1.noktaSayisi} konum, ${rota1.mesafeM} m, ${rota1.denemeSayisi} deneme; konum artık yazılmıyor`);
+// Rota detay sayfası ve oynatıcı
+await ap.goto(`${WEB}/admin/rotalar`); await ap.waitForSelector("a:has-text('Ahmet Kurye')");
+await ap.goto(`${WEB}/admin/rotalar/${rota1.id}`); await ap.waitForSelector("button:has-text('Oynat')"); await ap.waitForSelector(".leaflet-container");
+await ap.click("button:has-text('Oynat')"); await ap.waitForTimeout(500);
+assert.ok(await ap.locator("text=/\\d+\\/3 konum/").count());
+log("rota detay sayfası: harita + oynatıcı yüklendi");
 await api("/api/kurye/rota", { islem: "baslat" }, tok); await new Promise((r) => setTimeout(r, 1000)); await api("/api/kurye/rota", { islem: "bitir" }, tok);
 const yoldaTekrar = (await q(`select count(*)::int c from "SmsLog" s join "Shipment" g on g.id=s."shipmentId" where s.sablon='YOLDA' and g."assignedCourierId"=$1`, [ahmet]))[0].c;
 assert.equal(yoldaTekrar, yoldaAdet, "rota tekrar başlatılınca yolda SMS'i tekrar gitmemeli");
@@ -224,6 +245,35 @@ liste = await api("/api/kurye/gonderiler", null, tok);
 const g2y = liste.data.gonderiler.find((g) => g.id === g2.id);
 assert.equal(g2y.tercih, "KOMSUYA_BIRAK"); assert.equal(g2y.komsuBilgisi, "Ahmet Bey, D:4");
 log("üye tercihi kaydedildi ve kurye listesine yansıdı");
+
+// --- 5b. Uyarılar ---
+await ap.goto(`${WEB}/admin/uyarilar`);
+await ap.waitForSelector("text=Adresten uzakta teslimat");
+assert.ok(await ap.locator("text=/doğrulanmış adresten \\d+ m uzakta/").count() >= 1);
+// Mehmet: rota aç, konumu 50 dk geriye çek → hareketsiz
+await api("/api/kurye/rota", { islem: "baslat" }, tokM);
+await api("/api/kurye/konum", { lat: 41.02, lng: 29.02, accuracyM: 9 }, tokM);
+await db.query(`update "CourierLocation" set zaman = now() - interval '50 minutes' where "courierId"=$1`, [mehmet]);
+await ap.goto(`${WEB}/admin/uyarilar`); await ap.waitForSelector("text=Hareketsiz kurye");
+assert.ok(await ap.locator("text=/50 dk'dır konum gelmiyor/").count() >= 1);
+// rota 15 saat geriye → bakim kapatır
+await db.query(`update "Route" set baslangic = now() - interval '15 hours' where "courierId"=$1 and bitis is null`, [mehmet]);
+const bakim = await (await fetch(`${WEB}/api/cron/bakim?key=test-cron-key`)).json();
+assert.equal(bakim.bakim.kapatilanRota, 1);
+assert.equal((await q(`select count(*)::int c from "Route" where "courierId"=$1 and bitis is null`, [mehmet]))[0].c, 0);
+assert.equal((await q(`select "otomatikKapandi" from "Route" where "courierId"=$1 order by baslangic desc limit 1`, [mehmet]))[0].otomatikKapandi, true);
+// incelendi → listeden düşer
+await ap.goto(`${WEB}/admin/uyarilar`);
+const once = await ap.locator("button:has-text('İncelendi')").count();
+await ap.locator("button:has-text('İncelendi')").first().click(); await ap.waitForLoadState("networkidle");
+await ap.reload();
+assert.equal(await ap.locator("button:has-text('İncelendi')").count(), once - 1);
+assert.equal((await q(`select count(*)::int c from "UyariIsareti"`))[0].c, 1);
+log("uyarılar: uzak teslim + hareketsiz listelendi, 15 saatlik rota otomatik kapandı, incelendi düştü");
+// hakediş tablosu ve Excel sayfası
+await ap.goto(`${WEB}/admin/dagitimlar/${campaignId}`); await ap.waitForSelector("text=Kurye hakediş");
+assert.ok(await ap.locator("tr:has-text('Ahmet Kurye')").count() >= 1);
+log("hakediş tablosu görünüyor");
 
 // --- 6. Admin: gönderi detayı, konum çakışması, canlı sayfa ---
 await ap.goto(`${WEB}/admin/gonderiler/${g1.id}`);

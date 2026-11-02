@@ -120,6 +120,10 @@ model MemberAddress {
   konumDurumu        KonumDurumu  @default(YOK)
   verifiedCount      Int          @default(0)
   lastVerifiedAt     DateTime?
+  // Geocoding (tahmini konum) bilgisi
+  geoKalite          String?      // ADRES | SOKAK | MAHALLE | ILCE
+  geocodeDenemesi    Int          @default(0)
+  geocodeHata        String?
   // Çakışma bekleyen aday konum (150 m kuralı)
   adayLat            Float?
   adayLng            Float?
@@ -358,8 +362,35 @@ model Route {
   campaign   Campaign? @relation(fields: [campaignId], references: [id])
   baslangic  DateTime  @default(now())
   bitis      DateTime?
+  // Rota kapanırken hesaplanan özet
+  mesafeM      Float?
+  noktaSayisi  Int?
+  denemeSayisi Int?
+  otomatikKapandi Boolean @default(false)
 
   @@index([courierId, bitis])
+  @@index([baslangic])
+}
+
+/** Normalize adres → koordinat önbelleği (aynı adres bir daha sorgulanmaz) */
+model GeocodeCache {
+  adresNormalize String   @id
+  lat            Float?
+  lng            Float?
+  kalite         String?
+  saglayici      String
+  createdAt      DateTime @default(now())
+}
+
+/** Admin'in "incelendi" dediği uyarılar (listeden düşer) */
+model UyariIsareti {
+  id        String   @id @default(cuid())
+  tur       String
+  anahtar   String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@unique([tur, anahtar])
 }
 
 model CourierLocation {

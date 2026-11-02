@@ -41,7 +41,7 @@ export function AtamaPaneli({ gonderiler: ilk, kuryeler, campaignId }: { gonderi
     router.refresh();
   });
 
-  const noktalar: Nokta[] = filtreli.filter((g) => g.lat != null).map((g) => ({ id: g.id, lat: g.lat!, lng: g.lng!, renk: g.kuryeId ? kuryeRenk(g.kuryeId, kuryeler) : GONDERI_DURUMU_RENK[g.durum], etiket: `${g.unvan}${g.kuryeAd ? ` · ${g.kuryeAd}` : ""}`, secili: secili.has(g.id) }));
+  const noktalar: Nokta[] = filtreli.filter((g) => g.lat != null).map((g) => ({ id: g.id, lat: g.lat!, lng: g.lng!, renk: g.kuryeId ? kuryeRenk(g.kuryeId, kuryeler) : GONDERI_DURUMU_RENK[g.durum], etiket: `${g.unvan}${g.kuryeAd ? ` · ${g.kuryeAd}` : ""}${g.konumDurumu !== "DOGRULANDI" ? " · tahmini konum" : ""}`, secili: secili.has(g.id), tahmini: g.konumDurumu !== "DOGRULANDI" }));
   const konumsuz = filtreli.filter((g) => g.lat == null).length;
   const kuryeSayac = (id: string) => gonderiler.filter((g) => g.kuryeId === id).length;
 
@@ -69,7 +69,7 @@ export function AtamaPaneli({ gonderiler: ilk, kuryeler, campaignId }: { gonderi
       <div className="grid xl:grid-cols-2 gap-3">
         <div>
           {noktalar.length ? <Harita noktalar={noktalar} yukseklik={520} secimModu={secimModu} onAlanSec={(ids) => setSecili((s) => new Set([...s, ...ids.filter((id) => acik(gonderiler.find((g) => g.id === id)!.durum))]))} onNoktaTikla={(id) => { if (!secimModu) toggle(id); }} /> : <div className="card p-6 text-sm text-gray-500 h-[520px] flex items-center justify-center">Filtredeki gönderilerin bilinen konumu yok. İlk dağıtımda konumlar kurye GPS'i ile oluşur; şimdilik ilçe filtresiyle atayın.</div>}
-          <p className="text-xs text-gray-500 mt-1">{noktalar.length} gönderi haritada{konumsuz ? `, ${konumsuz} tanesinin konumu yok (listeden seçin)` : ""}. Noktaya tıklayarak seç/kaldır; "alan seç" açıkken basılı tutup sürükleyin.</p>
+          <p className="text-xs text-gray-500 mt-1">{noktalar.length} gönderi haritada ({noktalar.filter((n) => n.tahmini).length} tahmini, kesikli daire){konumsuz ? `, ${konumsuz} tanesinin konumu yok (listeden seçin)` : ""}. Noktaya tıklayarak seç/kaldır; "alan seç" açıkken basılı tutup sürükleyin.</p>
         </div>
         <div className="card overflow-auto max-h-[560px]">
           <table className="table">

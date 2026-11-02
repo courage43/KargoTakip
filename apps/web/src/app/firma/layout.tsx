@@ -11,6 +11,7 @@ export default async function FirmaLayout({ children }: { children: React.ReactN
       <Sidebar baslik={firma?.ad ?? "Kurye Firması"} ad={o.ad} rolEtiket={ROL_ETIKET[o.rol]} linkler={[
         { href: "/firma", etiket: "Dağıtımlar" },
         { href: "/firma/kuryeler", etiket: "Kuryeler" },
+        { href: "/firma/rotalar", etiket: "Rotalar" },
       ]} />
       <main className="flex-1 p-6 max-w-[1500px]">{children}</main>
     </div>

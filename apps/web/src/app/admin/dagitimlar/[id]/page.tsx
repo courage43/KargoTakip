@@ -10,6 +10,8 @@ import { tarih, yuzde } from "@/lib/format";
 import { KAMPANYA_DURUMU_ETIKET, GONDERI_DURUMU_ETIKET, UYE_TERCIHI_ETIKET } from "@dagitim/shared";
 import { KampanyaHarita } from "@/components/KampanyaHarita";
 import { SmsKarti } from "@/components/SmsKarti";
+import { HakedisTablosu } from "@/components/HakedisTablosu";
+import { kampanyaHakedis } from "@/lib/campaign";
 import { kampanyaSmsOzeti } from "@/lib/sms/kuyruk";
 import { smsAyarlari, sablonDoldur, linkUret, mesajUzunluk, tarihAraligi, saglayiciAdi } from "@/lib/sms";
 
@@ -29,11 +31,11 @@ export default async function DagitimDetay({ params, searchParams }: { params: P
     prisma.shipment.groupBy({ by: ["assignedCourierId", "durum"], where: { campaignId: id }, _count: { _all: true } }),
   ]);
   const kuryePerf = kuryeler.map((ku) => { const s = kuryeOzet.filter((x) => x.assignedCourierId === ku.id); const n = (d: string[]) => s.filter((x) => d.includes(x.durum)).reduce((a, b) => a + b._count._all, 0); return { ku, toplam: s.reduce((a, b) => a + b._count._all, 0), teslim: n(["TESLIM_EDILDI", "KOMSUYA_BIRAKILDI", "ISYERINE_BIRAKILDI"]), basarisiz: n(["ADRESTE_BULUNAMADI", "ADRES_HATALI", "TASINMIS"]) }; });
-  const [smsOzet, smsAyar, tercihGrup] = await Promise.all([kampanyaSmsOzeti(id), smsAyarlari(), prisma.shipment.groupBy({ by: ["uyeTercihi"], where: { campaignId: id, uyeTercihi: { not: null } }, _count: { _all: true } })]);
+  const [smsOzet, smsAyar, tercihGrup, hakedis] = await Promise.all([kampanyaSmsOzeti(id), smsAyarlari(), prisma.shipment.groupBy({ by: ["uyeTercihi"], where: { campaignId: id, uyeTercihi: { not: null } }, _count: { _all: true } }), kampanyaHakedis(id)]);
   const ornekMesaj = sablonDoldur(k.smsSablonu || smsAyar.sablonTercih, { ODA: smsAyar.odaAdi, TARIH: tarihAraligi(k.planlananBaslangic, k.planlananBitis), LINK: linkUret("ornekTOKEN123456"), UNVAN: "Örnek Firma Ltd." });
   const uzunluk = mesajUzunluk(ornekMesaj);
   const tercihler = Object.fromEntries(tercihGrup.map((t) => [UYE_TERCIHI_ETIKET[t.uyeTercihi!], t._count._all]));
-  const haritaNoktalari = await prisma.shipment.findMany({ where: { campaignId: id, memberAddress: { geoLat: { not: null } } }, select: { id: true, durum: true, member: { select: { unvan: true } }, memberAddress: { select: { geoLat: true, geoLng: true } } }, take: 6000 });
+  const haritaNoktalari = await prisma.shipment.findMany({ where: { campaignId: id, memberAddress: { geoLat: { not: null } } }, select: { id: true, durum: true, member: { select: { unvan: true } }, memberAddress: { select: { geoLat: true, geoLng: true, konumDurumu: true } } }, take: 6000 });
 
   return (
     <div className="space-y-6">
@@ -80,7 +82,9 @@ export default async function DagitimDetay({ params, searchParams }: { params: P
 
       {k.durum !== "TASLAK" && <SmsKarti campaignId={k.id} telefonlu={smsOzet.telefonlu} telefonsuz={smsOzet.telefonsuz} ozet={smsOzet.ozet} toplamParca={smsOzet.toplamParca} birimFiyat={smsAyar.birimFiyat} uygunTercih={smsOzet.uygunTercih} onizleme={ornekMesaj} parca={uzunluk.parca} turkce={uzunluk.turkce} saglayici={saglayiciAdi()} baslikVar={!!smsAyar.baslik} tercihler={tercihler} />}
 
-      <KampanyaHarita campaignId={k.id} noktalar={haritaNoktalari.map((g) => ({ id: g.id, lat: g.memberAddress.geoLat!, lng: g.memberAddress.geoLng!, durum: g.durum, etiket: `${g.member.unvan} · ${GONDERI_DURUMU_ETIKET[g.durum]}`, href: `/admin/gonderiler/${g.id}` }))} />
+      <KampanyaHarita campaignId={k.id} noktalar={haritaNoktalari.map((g) => ({ id: g.id, lat: g.memberAddress.geoLat!, lng: g.memberAddress.geoLng!, durum: g.durum, etiket: `${g.member.unvan} · ${GONDERI_DURUMU_ETIKET[g.durum]}${g.memberAddress.konumDurumu !== "DOGRULANDI" ? " · tahmini konum" : ""}`, href: `/admin/gonderiler/${g.id}`, tahmini: g.memberAddress.konumDurumu !== "DOGRULANDI" }))} />
+
+      <HakedisTablosu satirlar={hakedis} />
 
       <section className="space-y-3">
         <h2 className="font-semibold">Gönderiler <span className="text-gray-500 font-normal">({toplamFiltre})</span></h2>

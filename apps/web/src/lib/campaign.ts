@@ -90,6 +90,44 @@ export async function gonderileriAta(shipmentIds: string[], courierId: string | 
   return r.count;
 }
 
+export interface HakedisSatiri {
+  kuryeId: string; kurye: string; gun: string;
+  teslim: number; basarisiz: number; deneme: number;
+  ilk: Date | null; son: Date | null; rotaKm: number | null;
+}
+
+/** Kurye × gün bazlı hakediş: teslim, başarısız, deneme, ilk/son saat, rota km */
+export async function kampanyaHakedis(campaignId: string, courierCompanyId?: string | null): Promise<HakedisSatiri[]> {
+  const denemeler = await prisma.deliveryAttempt.findMany({
+    where: { shipment: { campaignId }, ...(courierCompanyId ? { courier: { courierCompanyId } } : {}) },
+    include: { courier: { select: { id: true, adSoyad: true } } },
+    orderBy: { sunucuZamani: "asc" },
+  });
+  const gunAnahtar = (d: Date) => d.toLocaleDateString("tr-TR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  const satirlar = new Map<string, HakedisSatiri>();
+  for (const d of denemeler) {
+    const gun = gunAnahtar(d.sunucuZamani);
+    const k = `${d.courierId}|${gun}`;
+    const s = satirlar.get(k) ?? { kuryeId: d.courierId, kurye: d.courier.adSoyad, gun, teslim: 0, basarisiz: 0, deneme: 0, ilk: null, son: null, rotaKm: null };
+    s.deneme++;
+    if (["TESLIM_EDILDI", "KOMSUYA_BIRAKILDI", "ISYERINE_BIRAKILDI"].includes(d.sonuc)) s.teslim++;
+    if (["ADRESTE_BULUNAMADI", "ADRES_HATALI", "TASINMIS"].includes(d.sonuc)) s.basarisiz++;
+    if (!s.ilk || d.sunucuZamani < s.ilk) s.ilk = d.sunucuZamani;
+    if (!s.son || d.sunucuZamani > s.son) s.son = d.sunucuZamani;
+    satirlar.set(k, s);
+  }
+  // Rota km: o gün o kuryenin kapanmış rotalarının toplamı
+  const kuryeIds = [...new Set(denemeler.map((d) => d.courierId))];
+  if (kuryeIds.length) {
+    const rotalar = await prisma.route.findMany({ where: { courierId: { in: kuryeIds }, mesafeM: { not: null } }, select: { courierId: true, baslangic: true, mesafeM: true } });
+    for (const r of rotalar) {
+      const s = satirlar.get(`${r.courierId}|${gunAnahtar(r.baslangic)}`);
+      if (s) s.rotaKm = Math.round(((s.rotaKm ?? 0) + (r.mesafeM ?? 0) / 1000) * 10) / 10;
+    }
+  }
+  return [...satirlar.values()].sort((a, b) => a.kurye.localeCompare(b.kurye, "tr") || a.gun.localeCompare(b.gun));
+}
+
 export async function kampanyaOzeti(campaignId: string) {
   const grup = await prisma.shipment.groupBy({ by: ["durum"], where: { campaignId }, _count: { _all: true } });
   const ozet: Record<string, number> = {};

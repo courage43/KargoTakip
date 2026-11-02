@@ -4,7 +4,7 @@ import { Harita, type Nokta } from "./Harita";
 import { useRealtime } from "@/lib/useRealtime";
 import { GONDERI_DURUMU_RENK } from "@dagitim/shared";
 
-interface G { id: string; lat: number; lng: number; durum: string; etiket: string; href: string }
+interface G { id: string; lat: number; lng: number; durum: string; etiket: string; href: string; tahmini?: boolean }
 
 /** Kampanya haritası: gönderi durum renkleri + canlı kurye konumları */
 export function KampanyaHarita({ campaignId, noktalar: ilk }: { campaignId: string; noktalar: G[] }) {
@@ -20,7 +20,7 @@ export function KampanyaHarita({ campaignId, noktalar: ilk }: { campaignId: stri
     }
   });
   const liste: Nokta[] = [
-    ...Object.values(gonderiler).map((g) => ({ id: g.id, lat: g.lat, lng: g.lng, renk: GONDERI_DURUMU_RENK[g.durum], etiket: g.etiket, href: g.href })),
+    ...Object.values(gonderiler).map((g) => ({ id: g.id, lat: g.lat, lng: g.lng, renk: GONDERI_DURUMU_RENK[g.durum], etiket: g.etiket, href: g.href, tahmini: g.tahmini })),
     ...Object.entries(kuryeler).map(([id, k]) => ({ id: `k-${id}`, lat: k.lat, lng: k.lng, renk: "#1d4ed8", etiket: `${k.ad} (canlı)`, tip: "kurye" as const })),
   ];
   return (
