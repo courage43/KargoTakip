@@ -1,7 +1,13 @@
 export interface Konum { lat: number; lng: number; accuracyM: number | null }
 
-/** Yüksek doğruluklu tek konum; zaman aşımında en iyi bilinen */
-export function konumAl(timeoutMs = 12000): Promise<Konum | null> {
+/** Yüksek doğruluklu tek konum; zaman aşımında en iyi bilinen. Native'de Capacitor Geolocation. */
+export async function konumAl(timeoutMs = 12000): Promise<Konum | null> {
+  const { isNative, nativeKonumAl } = await import("./platform");
+  if (isNative()) return nativeKonumAl(timeoutMs);
+  return tarayiciKonumAl(timeoutMs);
+}
+
+function tarayiciKonumAl(timeoutMs: number): Promise<Konum | null> {
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) return resolve(null);
     let enIyi: Konum | null = null;

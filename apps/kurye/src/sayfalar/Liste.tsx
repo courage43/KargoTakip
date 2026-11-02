@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { pushSil } from "../lib/platform";
 import { useUygulama } from "../lib/durum";
 import { tokenKaydet, type Gonderi } from "../lib/api";
 import { GONDERI_DURUMU_ETIKET, GONDERI_DURUMU_RENK, UYE_TERCIHI_ETIKET, navigasyonLinki } from "@dagitim/shared";
@@ -7,14 +8,17 @@ import { GONDERI_DURUMU_ETIKET, GONDERI_DURUMU_RENK, UYE_TERCIHI_ETIKET, navigas
 const ACIK = ["ATANDI", "YOLDA", "BEKLIYOR"];
 
 export function Liste() {
-  const { ben, gonderiler, cevrimici, bekleyen, sonSenkron, yukleniyor, yenile, rotaDegistir, kuyrukTetikle } = useUygulama();
+  const { ben, gonderiler, cevrimici, bekleyen, sonSenkron, yukleniyor, yenile, rotaDegistir, kuyrukTetikle, sirala } = useUygulama();
+  const nav = useNavigate();
+  const [siralaniyor, setSiralaniyor] = useState(false);
+  const [siraMesaj, setSiraMesaj] = useState<string | null>(null);
   const [sekme, setSekme] = useState<"acik" | "bitti">("acik");
   const [q, setQ] = useState("");
   const [ilce, setIlce] = useState("");
   const acik = useMemo(() => gonderiler.filter((g) => ACIK.includes(g.durum)), [gonderiler]);
   const bitti = useMemo(() => gonderiler.filter((g) => !ACIK.includes(g.durum)), [gonderiler]);
   const ilceler = useMemo(() => [...new Set(acik.map((g) => g.adres.ilce).filter(Boolean))].sort() as string[], [acik]);
-  const liste = (sekme === "acik" ? acik : bitti).filter((g) => (!ilce || g.adres.ilce === ilce) && (!q || g.uye.unvan.toLowerCase().includes(q.toLowerCase()) || (g.uye.tabelaUnvani ?? "").toLowerCase().includes(q.toLowerCase()) || g.adres.metin.toLowerCase().includes(q.toLowerCase())));
+  const liste = (sekme === "acik" ? acik : bitti).filter((g) => (!ilce || g.adres.ilce === ilce) && (!q || g.uye.unvan.toLowerCase().includes(q.toLowerCase()) || (g.uye.tabelaUnvani ?? "").toLowerCase().includes(q.toLowerCase()) || g.adres.metin.toLowerCase().includes(q.toLowerCase()) || (g.barkod ?? "").toLowerCase().includes(q.toLowerCase())));
 
   return (
     <main className="min-h-screen pb-24">
@@ -39,7 +43,12 @@ export function Liste() {
           <button onClick={() => setSekme("bitti")} className={`flex-1 py-2 rounded-xl font-medium ${sekme === "bitti" ? "bg-blue-700 text-white" : "bg-white border"}`}>Bugün bitti ({bitti.length})</button>
         </div>
         <div className="flex gap-2">
-          <input className="input" placeholder="Firma veya adres ara" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="btn btn-secondary py-2 text-sm" disabled={siralaniyor || !acik.length} onClick={async () => { setSiralaniyor(true); const r = await sirala(); setSiraMesaj(r ? `${r.adet} adres sıralandı · tahmini ${(r.tahminiMesafeM / 1000).toFixed(1)} km` : "Sıralama yapılamadı"); setSiralaniyor(false); }}>{siralaniyor ? "Sıralanıyor…" : "📍 Rotamı sırala"}</button>
+          <button className="btn btn-secondary py-2 text-sm" onClick={() => nav("/qr")}>📷 QR okut</button>
+        </div>
+        {siraMesaj && <p className="text-xs text-gray-600">{siraMesaj}</p>}
+        <div className="flex gap-2">
+          <input className="input" placeholder="Firma, adres veya zarf kodu ara" value={q} onChange={(e) => setQ(e.target.value)} />
           {ilceler.length > 1 && <select className="input w-40" value={ilce} onChange={(e) => setIlce(e.target.value)}><option value="">Tüm ilçeler</option>{ilceler.map((i) => <option key={i}>{i}</option>)}</select>}
         </div>
         {sonSenkron && <p className="text-xs text-gray-500">Son güncelleme: {new Date(sonSenkron).toLocaleTimeString("tr-TR")}</p>}
@@ -48,7 +57,7 @@ export function Liste() {
         {!liste.length && <div className="card p-6 text-center text-gray-500 text-sm">{sekme === "acik" ? "Size atanmış bekleyen gönderi yok." : "Bugün tamamlanan gönderi yok."}</div>}
       </div>
       <footer className="fixed bottom-0 inset-x-0 p-3 bg-white border-t text-center text-xs text-gray-500">
-        <button className="underline" onClick={() => { tokenKaydet(null); window.location.href = "/giris"; }}>Çıkış yap</button>
+        <button className="underline" onClick={async () => { await pushSil(); tokenKaydet(null); window.location.href = "/giris"; }}>Çıkış yap</button>
       </footer>
     </main>
   );
@@ -63,7 +72,7 @@ function Kart({ g, sira, nav }: { g: Gonderi; sira: number; nav: "google" | "yan
     <div className="card p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="text-xs text-gray-500">#{sira}{g.adres.ilce ? ` · ${g.adres.ilce}` : ""} · {g.kampanyaAd}</div>
+          <div className="text-xs text-gray-500">#{g.siraNo ?? sira}{g.adres.ilce ? ` · ${g.adres.ilce}` : ""}{g.barkod ? ` · ${g.barkod}` : ""} · {g.kampanyaAd}</div>
           <div className="font-bold leading-tight">{g.uye.unvan}</div>
           {g.uye.tabelaUnvani && g.uye.tabelaUnvani !== g.uye.unvan && <div className="text-sm text-gray-600">Tabela: {g.uye.tabelaUnvani}</div>}
         </div>

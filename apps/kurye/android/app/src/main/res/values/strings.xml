@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Dağıtım Kurye</string>
+    <string name="title_activity_main">Dağıtım Kurye</string>
+    <string name="package_name">tr.org.oda.dagitimkurye</string>
+    <string name="custom_url_scheme">tr.org.oda.dagitimkurye</string>
+</resources>

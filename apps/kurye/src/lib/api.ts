@@ -18,7 +18,7 @@ export async function api<T>(yol: string, init: RequestInit = {}): Promise<T> {
 }
 
 export interface Gonderi {
-  id: string; kampanyaId: string; kampanyaAd: string; durum: string; siraNo: number | null; denemeSayisi: number;
+  id: string; kampanyaId: string; kampanyaAd: string; durum: string; siraNo: number | null; barkod?: string | null; denemeSayisi: number;
   uye: { unvan: string; tabelaUnvani: string | null; sicilNo: string; cepTelefonu: string | null; isTelefonu: string | null; yetkili: string | null };
   adres: { id: string; metin: string; ilce: string | null; lat: number | null; lng: number | null; konumDurumu: string; kuryeNotu: string | null };
   tercih: string | null; uyeNotu: string | null; komsuBilgisi: string | null; alternatifAdres: string | null; uygunSaat: string | null;

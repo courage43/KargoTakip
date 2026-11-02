@@ -10,3 +10,9 @@ storage/
 coverage
 playwright-report
 test-results
+apps/kurye/android/local.properties
+apps/kurye/android/app/build/
+apps/kurye/android/build/
+apps/kurye/android/.gradle/
+apps/kurye/android/app/google-services.json
+apps/kurye/android/release.keystore

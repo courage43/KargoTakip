@@ -17,7 +17,7 @@ const log = (...a) => console.log("•", ...a);
 const sure = (t0) => `${((Date.now() - t0) / 1000).toFixed(1)} sn`;
 
 // Önceki test verisini temizle (kullanıcılar, firmalar ve ayarlar kalır)
-await db.query(`TRUNCATE "DeliveryAttempt","CourierLocation","Route","SmsLog","AddressChangeRequest","Shipment","MemberAddress","Member","ImportBatch","Campaign","AuditLog" CASCADE`);
+await db.query(`TRUNCATE "DeliveryAttempt","CourierLocation","Route","SmsLog","AddressChangeRequest","Shipment","MemberAddress","Member","ImportBatch","Campaign","AuditLog","UyariIsareti","DeviceToken","GeocodeCache" CASCADE`);
 log("test verisi sıfırlandı");
 const browser = await chromium.launch();
 const admin = await browser.newContext();
@@ -85,6 +85,15 @@ await ap.waitForSelector("text=Oluşturulan gönderi");
 const b2 = (await q(`select * from "ImportBatch" where "campaignId"=$1 order by "createdAt" desc limit 1`, [campaignId]))[0];
 assert.equal(b2.eklenen, 300); assert.equal(b2.eslesmeyen, 1);
 log("dağıtım listesi: 300 gönderi, 1 eşleşmeyen");
+// --- 2a. Barkod, etiket PDF, gizlilik ---
+const barkodlar = await q(`select barkod from "Shipment" where "campaignId"=$1`, [campaignId]);
+assert.ok(barkodlar.every((b) => /^K\d+-\d{4}$/.test(b.barkod)), "tüm gönderilerde K{n}-{4 hane} barkod olmalı");
+assert.equal(new Set(barkodlar.map((b) => b.barkod)).size, 300, "barkodlar benzersiz");
+const etiket = await ap.request.get(`${WEB}/api/export/etiket/${campaignId}`);
+assert.equal(etiket.status(), 200); const etiketBuf = await etiket.body();
+assert.ok(etiketBuf.subarray(0, 5).toString() === "%PDF-" && etiketBuf.length > 20000, `etiket PDF ${etiketBuf.length} byte`);
+assert.equal((await fetch(`${WEB}/gizlilik`)).status, 200);
+log(`barkodlar üretildi, etiket PDF ${Math.round(etiketBuf.length / 1024)} KB, gizlilik sayfası açık`);
 await ap.goto(`${WEB}/admin/dagitimlar/${campaignId}`);
 await ap.click("button:has-text('Dağıtımı başlat')");
 await ap.waitForSelector("text=Aktif");
@@ -170,19 +179,42 @@ const api = async (yol, body, token) => {
 };
 const giris = await api("/api/auth/kurye-login", { telefon: "05550000001", pin: "1234" });
 assert.equal(giris.status, 200); const tok = giris.data.token;
+// cihaz token kaydı ve bir atama daha → push (sahte sağlayıcı sunucu loguna yazar)
+assert.equal((await api("/api/kurye/cihaz", { token: "test-cihaz-token-ahmet-123456", platform: "android" }, tok)).status, 200);
+assert.equal((await api("/api/kurye/cihaz", { token: "gecersiz-token-ahmet-0000001", platform: "android" }, tok)).status, 200);
+assert.equal((await q(`select count(*)::int c from "DeviceToken" where "userId"=$1`, [ahmet]))[0].c, 2);
+{
+  const ekstra = (await q(`select id from "Shipment" where "campaignId"=$1 and durum='BEKLIYOR' limit 1`, [campaignId]))[0].id;
+  await fp.goto(`${WEB}/firma/dagitimlar/${campaignId}`); await fp.waitForSelector("text=gönderi seçili");
+  await fp.selectOption("select.w-40 >> nth=1", "ATANMAMIS"); await fp.fill("input[placeholder='Unvan, sicil, adres']", (await q(`select m."sicilNo" from "Shipment" s join "Member" m on m.id=s."memberId" where s.id=$1`, [ekstra]))[0].sicilNo);
+  await fp.waitForSelector("text=/Filtredekileri seç \\(1\\)/");
+  await fp.click("button:has-text('Filtredekileri seç')"); await fp.locator("select.w-56").selectOption(ahmet); await fp.click("button:has-text('Kuryeye ata')");
+  await fp.waitForSelector("text=/1 gönderi Ahmet Kurye kuryesine atandı/");
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal((await q(`select count(*)::int c from "DeviceToken" where "userId"=$1`, [ahmet]))[0].c, 1, "geçersiz push token silinmeli");
+  log("push: cihaz kaydı, atama bildirimi (sahte), geçersiz token temizlendi");
+}
 assert.equal((await api("/api/auth/kurye-login", { telefon: "05550000001", pin: "0000" })).status, 401);
 let liste = await api("/api/kurye/gonderiler", null, tok);
-assert.equal(liste.data.gonderiler.length, ahmetAdet);
-assert.ok(liste.data.gonderiler.every((g) => g.adres.ilce === "Kadıköy"));
+assert.equal(liste.data.gonderiler.length, ahmetAdet + 1);
+// rota sıralama
+const sirala = await api("/api/kurye/sirala", { lat: 40.99, lng: 29.03 }, tok);
+assert.equal(sirala.status, 200); assert.equal(sirala.data.adet, ahmetAdet + 1); assert.ok(sirala.data.tahminiMesafeM > 0);
+liste = await api("/api/kurye/gonderiler", null, tok);
+const siralar = liste.data.gonderiler.map((g) => g.siraNo);
+assert.deepEqual(siralar, siralar.map((_, i) => i + 1), "liste siraNo 1..N sırasında gelmeli");
+assert.ok(liste.data.gonderiler.every((g) => /^K\d+-\d{4}$/.test(g.barkod)));
+log(`rota sıralama: ${sirala.data.adet} gönderi, tahmini ${(sirala.data.tahminiMesafeM / 1000).toFixed(1)} km, liste sıralı`);
+assert.ok(liste.data.gonderiler.filter((g) => g.adres.ilce === "Kadıköy").length >= ahmetAdet);
 log(`kurye API: giriş, ${ahmetAdet} gönderi listelendi`);
 const rota = await api("/api/kurye/rota", { islem: "baslat" }, tok); assert.equal(rota.data.rotaAcik, true);
 const konum = await api("/api/kurye/konum", { lat: 40.99, lng: 29.03, accuracyM: 12 }, tok); assert.equal(konum.data.ok, true);
 assert.equal((await q(`select count(*)::int c from "CourierLocation"`))[0].c, 1);
 for (let i = 0; i < 40; i++) { const k = (await q(`select count(*)::int c from "SmsLog" where sablon='YOLDA' and durum='KUYRUKTA'`))[0].c; if (!k) break; await new Promise((r) => setTimeout(r, 500)); }
 const yoldaAdet = (await q(`select count(*)::int c from "SmsLog" s join "Shipment" g on g.id=s."shipmentId" where s.sablon='YOLDA' and g."assignedCourierId"=$1`, [ahmet]))[0].c;
-assert.ok(yoldaAdet >= 29 && yoldaAdet <= 30, `yolda SMS: ${yoldaAdet}`);
+assert.ok(yoldaAdet >= 29 && yoldaAdet <= 31, `yolda SMS: ${yoldaAdet}`);
 log(`"kurye yolda" SMS'i kuyruklandı ve gönderildi: ${yoldaAdet}`);
-assert.equal((await q(`select count(*)::int c from "Shipment" where "assignedCourierId"=$1 and durum='YOLDA'`, [ahmet]))[0].c, ahmetAdet);
+assert.equal((await q(`select count(*)::int c from "Shipment" where "assignedCourierId"=$1 and durum='YOLDA'`, [ahmet]))[0].c, ahmetAdet + 1);
 log("rota başladı, konum yazıldı, gönderiler YOLDA");
 
 const g1 = liste.data.gonderiler[0], g2 = liste.data.gonderiler[1], g3 = liste.data.gonderiler[2];

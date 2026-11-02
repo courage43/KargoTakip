@@ -27,7 +27,7 @@ export default async function FirmaDagitim({ params }: { params: Promise<{ id: s
       <AtamaPaneli campaignId={id} kuryeler={kuryeler} gonderiler={gonderiler.map((g) => ({
         id: g.id, unvan: g.member.unvan, sicilNo: g.member.sicilNo, adres: g.memberAddress.adresMetni, ilce: g.memberAddress.ilce,
         lat: g.memberAddress.geoLat, lng: g.memberAddress.geoLng, konumDurumu: g.memberAddress.konumDurumu, durum: g.durum,
-        kuryeId: g.assignedCourierId, kuryeAd: g.assignedCourier?.adSoyad ?? null, tercih: g.uyeTercihi, kuryeNotu: g.memberAddress.kuryeNotu, telefon: g.member.cepTelefonu,
+        kuryeId: g.assignedCourierId, kuryeAd: g.assignedCourier?.adSoyad ?? null, tercih: g.uyeTercihi, kuryeNotu: g.memberAddress.kuryeNotu, telefon: g.member.cepTelefonu, siraNo: g.siraNo, barkod: g.barkod,
       }))} />
       <HakedisTablosu satirlar={hakedis} baslik="Kuryelerinizin hakedişi (gün bazlı)" />
     </div>

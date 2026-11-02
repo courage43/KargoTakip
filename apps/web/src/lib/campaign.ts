@@ -4,8 +4,29 @@ import { exceliOku, satirlariAyristir, type SutunEslemesi } from "@dagitim/excel
 import { dosyaOku } from "./storage";
 import { denetimKaydi } from "./audit";
 import { yayinla } from "./notify";
+import { barkodUret } from "./etiket";
+import { kuryelereBildir, kuryeyeBildir } from "./push";
 
 const tokenUret = () => randomBytes(16).toString("base64url");
+
+/** Kampanyanın sıra numarası (barkod öneki için): oluşturulma sırasına göre 1'den başlar */
+async function kampanyaNo(campaignId: string): Promise<number> {
+  const k = await prisma.campaign.findUniqueOrThrow({ where: { id: campaignId }, select: { createdAt: true } });
+  return (await prisma.campaign.count({ where: { createdAt: { lt: k.createdAt } } })) + 1;
+}
+
+/** Barkodu olmayan gönderilere K{no}-{sıra} kodu ver (idempotent) */
+export async function barkodlariDoldur(campaignId: string): Promise<number> {
+  const eksik = await prisma.shipment.findMany({ where: { campaignId, barkod: null }, select: { id: true }, orderBy: { createdAt: "asc" } });
+  if (!eksik.length) return 0;
+  const no = await kampanyaNo(campaignId);
+  const son = await prisma.shipment.findMany({ where: { campaignId, barkod: { not: null } }, select: { barkod: true } });
+  let sira = son.reduce((m, s) => Math.max(m, Number(s.barkod!.split("-")[1] ?? 0)), 0);
+  for (let i = 0; i < eksik.length; i += 200) {
+    await prisma.$transaction(eksik.slice(i, i + 200).map((g) => prisma.shipment.update({ where: { id: g.id }, data: { barkod: barkodUret(no, ++sira) } })));
+  }
+  return eksik.length;
+}
 
 export interface DagitimListesiSonucu {
   olusturulan: number;
@@ -56,6 +77,7 @@ export async function dagitimListesiniIsle(batchId: string, esleme: SutunEslemes
     const r = await prisma.shipment.createMany({ data: veriler.slice(i, i + 500), skipDuplicates: true });
     sonuc.olusturulan += r.count;
   }
+  await barkodlariDoldur(batch.campaignId!);
   await prisma.importBatch.update({
     where: { id: batchId },
     data: {
@@ -87,6 +109,7 @@ export async function gonderileriAta(shipmentIds: string[], courierId: string | 
   });
   await denetimKaydi(oturum.sub, courierId ? "ATAMA" : "ATAMA_KALDIR", "Shipment", null, { adet: r.count, courierId, shipmentIds: shipmentIds.slice(0, 50) });
   await yayinla("shipment", { tip: "atama", courierId, adet: r.count, shipmentIds: shipmentIds.slice(0, 200) });
+  if (courierId && r.count) await kuryeyeBildir(courierId, { baslik: "Yeni gönderi atandı", govde: `${r.count} gönderi listenize eklendi.`, veri: { tip: "atama" } });
   return r.count;
 }
 

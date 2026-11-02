@@ -49,6 +49,8 @@ export default async function DagitimDetay({ params, searchParams }: { params: P
           {k.durum === "AKTIF" && <form action={kampanyaDurum.bind(null, k.id, "TAMAMLANDI")}><button className="btn-secondary">Tamamlandı olarak kapat</button></form>}
           {k.durum === "TAMAMLANDI" && <form action={kampanyaDurum.bind(null, k.id, "AKTIF")}><button className="btn-secondary">Yeniden aç</button></form>}
           <a className="btn-secondary" href={`/api/export/dagitim/${k.id}`}>Sonuç Excel</a>
+          <a className="btn-secondary" href={`/api/export/etiket/${k.id}`} target="_blank" rel="noreferrer">🏷 Zarf etiketleri</a>
+          <a className="btn-secondary" href={`/firma/dagitimlar/${k.id}/yazdir`} target="_blank" rel="noreferrer">🖨 Kurye listeleri</a>
         </div>
       </div>
 

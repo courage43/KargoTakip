@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   return json({
     sunucuZamani: new Date().toISOString(),
     gonderiler: liste.map((g) => ({
-      id: g.id, kampanyaId: g.campaign.id, kampanyaAd: g.campaign.ad, durum: g.durum, siraNo: g.siraNo, denemeSayisi: g.denemeSayisi,
+      id: g.id, kampanyaId: g.campaign.id, kampanyaAd: g.campaign.ad, durum: g.durum, siraNo: g.siraNo, barkod: g.barkod, denemeSayisi: g.denemeSayisi,
       uye: { unvan: g.member.unvan, tabelaUnvani: g.member.tabelaUnvani, sicilNo: g.member.sicilNo, cepTelefonu: g.member.cepTelefonu, isTelefonu: g.member.isTelefonu, yetkili: g.member.yetkiliAdSoyad },
       adres: { id: g.memberAddress.id, metin: g.memberAddress.adresMetni, ilce: g.memberAddress.ilce, lat: g.memberAddress.geoLat, lng: g.memberAddress.geoLng, konumDurumu: g.memberAddress.konumDurumu, kuryeNotu: g.memberAddress.kuryeNotu },
       tercih: g.uyeTercihi, uyeNotu: g.uyeNotu, komsuBilgisi: g.komsuBilgisi, alternatifAdres: g.alternatifAdres, uygunSaat: g.uygunSaat,

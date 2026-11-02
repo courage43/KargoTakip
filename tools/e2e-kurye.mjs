@@ -23,6 +23,19 @@ console.log("• kartlarda: tercih rozeti", tercihChip, "| saha notu", sahaNotu,
 const yolTarifi = await p.locator("a:has-text('Yol tarifi')").first().getAttribute("href");
 console.log("• ilk yol tarifi linki:", yolTarifi);
 await p.screenshot({ path: process.argv[2] + "/pwa-liste.png", fullPage: false });
+// Rotamı sırala
+await p.click("button:has-text('Rotamı sırala')");
+await p.waitForSelector("text=/adres sıralandı/", { timeout: 20000 });
+console.log("• rotamı sırala:", await p.locator("text=/adres sıralandı/").textContent());
+// QR okut ekranı (kamera yok → elle giriş)
+await p.click("button:has-text('QR okut')");
+await p.waitForSelector("text=Zarf QR kodu okut");
+await p.waitForSelector("text=/Kamera (bulunamadı|açılamadı)|video/", { timeout: 15000 }).catch(() => {});
+await p.fill("input[placeholder^='Zarf kodu']", "K9-9999"); await p.click("button:has-text('Bul')");
+await p.waitForSelector("text=listenizde yok");
+await p.goBack();
+await p.waitForSelector("text=Bekleyen (");
+console.log("• QR okut ekranı açıldı, bilinmeyen kod uyarısı verdi");
 // Bugün bitti sekmesi
 await p.click("button:has-text('Bugün bitti')");
 console.log("• bugün bitti sekmesi kart:", await p.locator(".card:has-text('Yol tarifi')").count());

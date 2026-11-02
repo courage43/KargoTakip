@@ -2,12 +2,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Harita, type Nokta } from "./Harita";
-import { ata } from "@/app/actions/firma";
+import { ata, kuryeSirala } from "@/app/actions/firma";
 import { DurumRozeti, KonumRozeti } from "./DurumRozeti";
 import { GONDERI_DURUMU_RENK, UYE_TERCIHI_ETIKET } from "@dagitim/shared";
 import { useRealtime } from "@/lib/useRealtime";
 
-export interface AtamaGonderi { id: string; unvan: string; sicilNo: string; adres: string; ilce: string | null; lat: number | null; lng: number | null; konumDurumu: string; durum: string; kuryeId: string | null; kuryeAd: string | null; tercih: string | null; kuryeNotu: string | null; telefon: string | null }
+export interface AtamaGonderi { id: string; unvan: string; sicilNo: string; adres: string; ilce: string | null; lat: number | null; lng: number | null; konumDurumu: string; durum: string; kuryeId: string | null; kuryeAd: string | null; tercih: string | null; kuryeNotu: string | null; telefon: string | null; siraNo?: number | null; barkod?: string | null }
 
 export function AtamaPaneli({ gonderiler: ilk, kuryeler, campaignId }: { gonderiler: AtamaGonderi[]; kuryeler: { id: string; adSoyad: string }[]; campaignId: string }) {
   const [gonderiler, setGonderiler] = useState(ilk);
@@ -62,6 +62,10 @@ export function AtamaPaneli({ gonderiler: ilk, kuryeler, campaignId }: { gonderi
         <select className="input w-56" value={kurye} onChange={(e) => setKurye(e.target.value)}>{kuryeler.map((k) => <option key={k.id} value={k.id}>{k.adSoyad}</option>)}</select>
         <button className="btn-primary" disabled={!secili.size || !kurye || pending} onClick={() => uygula(kurye)}>{pending ? "Atanıyor…" : "Kuryeye ata"}</button>
         <button className="btn-secondary" disabled={!secili.size || pending} onClick={() => uygula(null)}>Atamayı kaldır</button>
+        <span className="mx-1 text-gray-300">|</span>
+        <button className="btn-secondary" disabled={!kurye || pending} title="Seçili kuryenin açık gönderilerini en kısa yola göre sıralar (ilçe kümeleri korunur)" onClick={() => start(async () => { const r = await kuryeSirala(kurye, campaignId); setMesaj(r.hata ? `Hata: ${r.hata}` : `${r.adet} gönderi sıralandı, tahmini yol ${((r.tahminiMesafeM ?? 0) / 1000).toFixed(1)} km`); router.refresh(); })}>↕ Kuryenin listesini sırala</button>
+        <a className="btn-secondary" href={`/firma/dagitimlar/${campaignId}/yazdir${kurye ? `?kurye=${kurye}` : ""}`} target="_blank" rel="noreferrer">🖨 Liste yazdır</a>
+        <a className="btn-secondary" href={`/api/export/etiket/${campaignId}?durum=acik${kurye ? `&kurye=${kurye}` : ""}`} target="_blank" rel="noreferrer">🏷 Zarf etiketleri (PDF)</a>
         {mesaj && <span className="text-sm text-gray-700 ml-2">{mesaj}</span>}
         {!kuryeler.length && <a className="text-sm underline ml-2" href="/firma/kuryeler">Önce kurye ekleyin</a>}
       </div>
@@ -77,7 +81,7 @@ export function AtamaPaneli({ gonderiler: ilk, kuryeler, campaignId }: { gonderi
             <tbody>{filtreli.slice(0, 1000).map((g) => (
               <tr key={g.id} className={secili.has(g.id) ? "bg-blue-50" : ""} onClick={() => acik(g.durum) && toggle(g.id)}>
                 <td><input type="checkbox" checked={secili.has(g.id)} disabled={!acik(g.durum)} onChange={() => toggle(g.id)} onClick={(e) => e.stopPropagation()} /></td>
-                <td><div className="font-medium">{g.unvan}</div><div className="text-xs text-gray-500">{g.sicilNo}{g.ilce ? ` · ${g.ilce}` : ""}</div></td>
+                <td><div className="font-medium">{g.siraNo ? <span className="text-gray-400 mr-1">#{g.siraNo}</span> : null}{g.unvan}</div><div className="text-xs text-gray-500">{g.sicilNo}{g.ilce ? ` · ${g.ilce}` : ""}{g.barkod ? ` · ${g.barkod}` : ""}</div></td>
                 <td className="text-xs max-w-xs">{g.adres}<div><KonumRozeti durum={g.konumDurumu} /></div>{g.kuryeNotu && <div className="text-blue-800">📝 {g.kuryeNotu}</div>}</td>
                 <td className="text-xs">{g.tercih ? UYE_TERCIHI_ETIKET[g.tercih] : "-"}</td>
                 <td className="text-xs">{g.kuryeAd ? <span className="badge text-white" style={{ background: kuryeRenk(g.kuryeId!, kuryeler) }}>{g.kuryeAd}</span> : <span className="text-gray-400">—</span>}</td>
@@ -89,7 +93,6 @@ export function AtamaPaneli({ gonderiler: ilk, kuryeler, campaignId }: { gonderi
           </table>
         </div>
       </div>
-      <input type="hidden" value={campaignId} readOnly />
     </div>
   );
 }

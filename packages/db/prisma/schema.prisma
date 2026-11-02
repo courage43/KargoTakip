@@ -52,6 +52,7 @@ model User {
   auditLogs         AuditLog[]
   adresKararlari    AddressChangeRequest[] @relation("KararVeren")
   rotalar           Route[]
+  cihazlar          DeviceToken[]
 
   @@index([courierCompanyId])
 }
@@ -380,6 +381,19 @@ model GeocodeCache {
   kalite         String?
   saglayici      String
   createdAt      DateTime @default(now())
+}
+
+/** Kurye cihazlarının push bildirimi token'ları */
+model DeviceToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  platform   String   // android | ios | web
+  createdAt  DateTime @default(now())
+  sonGorulme DateTime @default(now())
+
+  @@index([userId])
 }
 
 /** Admin'in "incelendi" dediği uyarılar (listeden düşer) */

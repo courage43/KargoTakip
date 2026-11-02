@@ -3,6 +3,7 @@ import { io, type Socket } from "socket.io-client";
 import { api, tokenAl, type Ben, type Gonderi } from "./api";
 import { gonderileriKaydet, gonderileriOku, kuyruguOku, gonderiGuncelle } from "./db";
 import { kuyruguGonder } from "./sync";
+import { isNative, arkaPlanKonumBaslat, arkaPlanKonumDurdur, pushKaydet } from "./platform";
 
 interface Durum {
   ben: Ben | null;
@@ -15,6 +16,8 @@ interface Durum {
   yerelGuncelle: (id: string, d: Partial<Gonderi>) => Promise<void>;
   rotaDegistir: (islem: "baslat" | "bitir") => Promise<void>;
   kuyrukTetikle: () => Promise<void>;
+  sirala: () => Promise<{ adet: number; tahminiMesafeM: number } | null>;
+  native: boolean;
 }
 
 const Ctx = createContext<Durum | null>(null);
@@ -54,7 +57,18 @@ export function UygulamaSaglayici({ children }: { children: React.ReactNode }) {
   const rotaDegistir = useCallback(async (islem: "baslat" | "bitir") => {
     const r = await api<{ rotaAcik: boolean }>("/api/kurye/rota", { method: "POST", body: JSON.stringify({ islem }) });
     setBen((b) => (b ? { ...b, rotaAcik: r.rotaAcik } : b));
+    if (r.rotaAcik) await arkaPlanKonumBaslat(); else await arkaPlanKonumDurdur();
     await yenile();
+  }, [yenile]);
+
+  const sirala = useCallback(async () => {
+    let konum: { lat: number; lng: number } | null = null;
+    try { const { konumAl } = await import("./konum"); const k = await konumAl(8000); if (k) konum = { lat: k.lat, lng: k.lng }; } catch { /* yok */ }
+    try {
+      const r = await api<{ adet: number; tahminiMesafeM: number }>("/api/kurye/sirala", { method: "POST", body: JSON.stringify(konum ?? {}) });
+      await yenile();
+      return r;
+    } catch { return null; }
   }, [yenile]);
 
   // İlk yükleme: önce yerel, sonra ağ
@@ -67,10 +81,11 @@ export function UygulamaSaglayici({ children }: { children: React.ReactNode }) {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); window.clearInterval(t); };
   }, [yenile, kuyrukTetikle]);
 
-  // Rota açıkken konum gönder (30 sn)
+  // Rota açıkken konum gönder: native'de arka plan izleyici, webde 30 sn aralık
   useEffect(() => {
     if (konumTimer.current) { window.clearInterval(konumTimer.current); konumTimer.current = null; }
-    if (!ben?.rotaAcik) return;
+    if (!ben?.rotaAcik) { if (isNative()) arkaPlanKonumDurdur(); return; }
+    if (isNative()) { arkaPlanKonumBaslat(); return; }
     const gonder = () => navigator.geolocation?.getCurrentPosition(
       (p) => api("/api/kurye/konum", { method: "POST", body: JSON.stringify({ lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: p.coords.accuracy, hiz: p.coords.speed ?? null }) }).catch(() => {}),
       () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
@@ -78,6 +93,12 @@ export function UygulamaSaglayici({ children }: { children: React.ReactNode }) {
     konumTimer.current = window.setInterval(gonder, 30000);
     return () => { if (konumTimer.current) window.clearInterval(konumTimer.current); };
   }, [ben?.rotaAcik]);
+
+  // Push (yalnızca native): yeni atama / tercih → yenile
+  useEffect(() => {
+    if (!tokenAl() || !isNative()) return;
+    pushKaydet((veri, dokunuldu) => { yenile(); if (dokunuldu && veri.shipmentId) window.location.href = `/teslimat/${veri.shipmentId}`; });
+  }, [yenile]);
 
   // Realtime: atama değişince yenile
   useEffect(() => {
@@ -89,5 +110,5 @@ export function UygulamaSaglayici({ children }: { children: React.ReactNode }) {
     return () => { s.disconnect(); };
   }, [yenile]);
 
-  return <Ctx.Provider value={{ ben, gonderiler, sonSenkron, cevrimici, bekleyen, yukleniyor, yenile, yerelGuncelle, rotaDegistir, kuyrukTetikle }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ ben, gonderiler, sonSenkron, cevrimici, bekleyen, yukleniyor, yenile, yerelGuncelle, rotaDegistir, kuyrukTetikle, sirala, native: isNative() }}>{children}</Ctx.Provider>;
 }

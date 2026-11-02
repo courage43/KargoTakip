@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { uyeTercihSchema } from "@dagitim/shared";
 import { yayinla } from "@/lib/notify";
+import { kuryeyeBildir } from "@/lib/push";
+import { UYE_TERCIHI_ETIKET } from "@dagitim/shared";
 
 /** Üye tercih sayfası formu (girişsiz, token ile) */
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
@@ -15,6 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   if ((d.uyeTercihi === "BASKA_ADRESE" || d.uyeTercihi === "EVDEYIM") && d.alternatifAdres && d.alternatifAdres.trim().length > 5) {
     await prisma.addressChangeRequest.create({ data: { memberId: g.memberId, eskiAddressId: g.memberAddressId, eskiAdres: g.memberAddress.adresMetni, yeniAdres: d.alternatifAdres.trim(), kaynak: "UYE_SAYFASI", shipmentId: g.id, eskiKonumVarMi: g.memberAddress.konumDurumu === "DOGRULANDI" } });
   }
+  if (g.assignedCourierId) await kuryeyeBildir(g.assignedCourierId, { baslik: "Üye tercih bildirdi", govde: `${(await prisma.member.findUnique({ where: { id: g.memberId }, select: { unvan: true } }))?.unvan ?? "Üye"}: ${UYE_TERCIHI_ETIKET[d.uyeTercihi]}${d.komsuBilgisi ? ` (${d.komsuBilgisi})` : ""}`, veri: { tip: "tercih", shipmentId: g.id } });
   await yayinla("shipment", { tip: "tercih", shipmentId: g.id, campaignId: g.campaignId, courierId: g.assignedCourierId, durum: d.uyeTercihi === "ZARF_ISTEMIYORUM" ? "UYE_ISTEMEDI" : g.durum });
   return NextResponse.json({ ok: true });
 }

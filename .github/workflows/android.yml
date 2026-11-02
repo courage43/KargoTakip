@@ -1,0 +1,70 @@
+# Kurye uygulamasının Android paketini derler.
+# - Her push'ta (apps/kurye veya packages/shared değişince) ve elle tetiklemede çalışır.
+# - Repo "Variables": VITE_API_URL (örn. https://dagitim.odaadi.org.tr), VITE_REALTIME_URL
+# - Repo "Secrets" (isteğe bağlı, imzalı sürüm için): KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+# - Repo "Secrets" (isteğe bağlı, push bildirimi için): GOOGLE_SERVICES_JSON (base64)
+# Çıktı: Actions → ilgili çalıştırma → Artifacts → kurye-apk (debug) ve kurye-release (imzalı APK + AAB)
+name: Android APK
+
+on:
+  push:
+    branches: [master, main]
+    paths: ["apps/kurye/**", "packages/shared/**", ".github/workflows/android.yml", "pnpm-lock.yaml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: android-actions/setup-android@v3
+      - run: pnpm install --frozen-lockfile
+      - name: Web paketini derle
+        working-directory: apps/kurye
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_REALTIME_URL: ${{ vars.VITE_REALTIME_URL }}
+        run: |
+          test -n "$VITE_API_URL" || { echo "VITE_API_URL repo variable tanımlı değil"; exit 1; }
+          pnpm build
+      - name: google-services.json (varsa)
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        working-directory: apps/kurye
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > android/app/google-services.json
+      - name: Capacitor sync
+        working-directory: apps/kurye
+        run: npx cap sync android
+      - name: Debug APK
+        working-directory: apps/kurye/android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kurye-apk
+          path: apps/kurye/android/app/build/outputs/apk/debug/app-debug.apk
+      - name: İmzalı sürüm (keystore varsa)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        working-directory: apps/kurye/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+          ./gradlew assembleRelease bundleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$PWD/release.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+      - uses: actions/upload-artifact@v4
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        with:
+          name: kurye-release
+          path: |
+            apps/kurye/android/app/build/outputs/apk/release/app-release.apk
+            apps/kurye/android/app/build/outputs/bundle/release/app-release.aab

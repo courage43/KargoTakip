@@ -82,7 +82,23 @@ node tools/e2e.mjs /tmp                                 # uçtan uca akış (web
 - **Faz 1 (bu sürüm):** yukarıdakilerin hepsi + çevrimdışı kurye kuyruğu + Excel dışa aktarım + denetim kaydı.
 - **Faz 2a (bu sürüm):** SMS bildirimi. Dağıtım sayfasındaki SMS kartından üyelere tercih linki gönderilir; isteğe bağlı "kurye yolda" SMS'i; SMS listesi, teslim raporu, Excel. Sağlayıcı `SMS_SAGLAYICI=netgsm` + `NETGSM_USERCODE/PASSWORD` ile Netgsm, varsayılan `sahte` (gerçek gönderim yapmaz, test için). Başlık ve şablonlar Ayarlar > SMS'te. `cron` servisi dakikada bir kuyruğu işler.
 - **Faz 2b (bu sürüm):** **Konum tahmini**: Üyeler sayfasındaki düğme veya `cron` ile konumu olmayan adresler geocode edilir (`GEOCODE_SAGLAYICI=nominatim` ücretsiz, `google` hızlı/ücretli). Tahmini konumlar haritada kesikli daire; kurye navigasyonu yine adres metnine gider, GPS ile doğrulanınca dolu daire olur. **Rotalar**: her "Rotaya başla/bitir" bir rota; km, konum ve deneme sayısı; harita üzerinde iz ve zaman kaydırıcılı oynatma. **Uyarılar**: hareketsiz kurye (45 dk), 14 saatten uzun açık rota (otomatik kapanır), doğrulanmış adresten 300 m uzakta teslim, GPS'siz kayıt, şüpheli hızlı teslimat; "incelendi" ile düşer. **Hakediş**: dağıtım sayfası ve Excel'de kurye × gün tablosu (teslim, başarısız, deneme, ilk/son saat, rota km). 90 günden eski ham konum izleri silinir.
-- **Faz 3:** Capacitor ile Play Store / App Store paketi (arka planda konum), push bildirimi, rota sıralama, zarf barkodu.
+- **Faz 3 (bu sürüm):** **Mağaza uygulaması**: aynı kurye kodu Capacitor ile Android paketine çevrildi (`apps/kurye/android`); arka planda konum paylaşımı (rota açıkken kalıcı bildirimle), push bildirimi (yeni atama, üye tercihi; Firebase gerekir), kamera ile QR okutma. **Rota sıralama**: kurye "Rotamı sırala" ile, firma yöneticisi panelden en kısa yola göre sıralar (ilçe kümeleri korunur). **Zarf etiketi**: her gönderiye `K{dağıtım}-{sıra}` kodu; A4 3×8 QR etiket PDF'i; kurye bazlı yazdırılabilir liste. **Gizlilik politikası** sayfası `/gizlilik` (mağaza listelemesi için).
+
+## Android uygulaması (Capacitor)
+
+Kurye uygulaması hem tarayıcıdan (PWA) hem mağaza paketi olarak çalışır; kod tektir.
+
+**APK'yı GitHub Actions ile almak (önerilen, bilgisayara kurulum gerekmez)**
+1. Depoda Settings → Secrets and variables → Actions → **Variables**: `VITE_API_URL` = `https://APP_DOMAIN`, `VITE_REALTIME_URL` = `https://REALTIME_DOMAIN`.
+2. Actions → "Android APK" → Run workflow. Bitince Artifacts bölümünden `kurye-apk` (app-debug.apk) indirilir; kurye telefonlarına doğrudan kurulabilir (bilinmeyen kaynaklara izin).
+3. Play Store için imzalı sürüm: bir kez `keytool -genkeypair -v -keystore release.keystore -alias kurye -keyalg RSA -keysize 2048 -validity 10000` ile anahtar üretin; `base64 -w0 release.keystore` çıktısını `KEYSTORE_BASE64`, şifreleri `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` secret'larına girin. İş akışı `kurye-release` artefaktında imzalı APK ve AAB üretir. **Anahtarı saklayın**; kaybolursa mağazada güncelleme yapılamaz.
+4. Push bildirimi için Firebase projesi açın, Android uygulaması (`tr.org.oda.dagitimkurye`) ekleyin, `google-services.json` dosyasını base64 ile `GOOGLE_SERVICES_JSON` secret'ına koyun; sunucu tarafında servis hesabı JSON'unu `FIREBASE_SERVICE_ACCOUNT_JSON` env'ine (base64) girin. Firebase yoksa uygulama çalışır, yalnızca bildirim gitmez.
+
+**Yerelde derlemek**: Android Studio veya SDK (platform 34, build-tools 34) + Java 17. `cd apps/kurye && pnpm cap:android` → `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+**iOS**: macOS + Xcode gerekir. `cd apps/kurye && pnpm build && npx cap add ios && npx cap sync ios && npx cap open ios`. `Info.plist`'e Türkçe izin metinleri ekleyin: `NSLocationAlwaysAndWhenInUseUsageDescription`, `NSLocationWhenInUseUsageDescription` ("Rota açıkken konumunuz dağıtım merkeziyle paylaşılır"), `NSCameraUsageDescription` ("Teslimat fotoğrafı ve zarf QR kodu için"). Background Modes → Location updates açılır. App Store için Apple Developer hesabı gerekir.
+
+**Play Console notları**: Arka plan konum izni için "konum beyanı" istenir; gerekçe: kurye rota açıkken canlı takip ve teslimat doğrulaması, yalnızca "Rotaya başla" ile "Rotayı bitir" arasında. Gizlilik politikası adresi: `https://APP_DOMAIN/gizlilik`.
 
 ## Notlar
 

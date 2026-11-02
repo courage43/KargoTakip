@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { gonderileriAta } from "@/lib/campaign";
 import { denetimKaydi } from "@/lib/audit";
 import { telefonNormalize } from "@dagitim/excel";
+import { kuryeListesiniSirala } from "@/lib/siralama";
 
 export async function ata(shipmentIds: string[], courierId: string | null): Promise<{ adet?: number; hata?: string }> {
   const o = await oturumGerekli(["KURYE_FIRMA_YONETICI", "ODA_ADMIN"]);
@@ -42,4 +43,14 @@ export async function kuryeAktiflik(userId: string, aktif: boolean) {
   if (!u || u.courierCompanyId !== o.companyId) throw new Error("Yetkisiz");
   await prisma.user.update({ where: { id: userId }, data: { aktif } });
   revalidatePath("/firma/kuryeler");
+}
+
+export async function kuryeSirala(courierId: string, campaignId: string): Promise<{ adet?: number; tahminiMesafeM?: number; hata?: string }> {
+  const o = await oturumGerekli(["KURYE_FIRMA_YONETICI", "ODA_ADMIN"]);
+  const k = await prisma.user.findUnique({ where: { id: courierId } });
+  if (!k || (o.rol === "KURYE_FIRMA_YONETICI" && k.courierCompanyId !== o.companyId)) return { hata: "Yetkisiz" };
+  const r = await kuryeListesiniSirala(courierId, null, campaignId);
+  await denetimKaydi(o.sub, "KURYE_SIRALA", "User", courierId, { campaignId, ...r });
+  revalidatePath(`/firma/dagitimlar/${campaignId}`);
+  return r;
 }
