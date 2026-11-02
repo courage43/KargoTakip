@@ -1,0 +1,421 @@
+// Üye Zarf Dağıtım ve Teslimat Sistemi — veri modeli
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Kullanıcılar ve roller ----------
+
+enum Rol {
+  ODA_ADMIN
+  KURYE_FIRMA_YONETICI
+  KURYE
+}
+
+model CourierCompany {
+  id        String   @id @default(cuid())
+  ad        String
+  telefon   String?
+  eposta    String?
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  campaigns Campaign[]
+  shipments Shipment[]
+}
+
+model User {
+  id               String          @id @default(cuid())
+  rol              Rol
+  adSoyad          String
+  eposta           String?         @unique
+  sifreHash        String?
+  telefon          String?         @unique
+  pinHash          String?
+  aktif            Boolean         @default(true)
+  courierCompanyId String?
+  courierCompany   CourierCompany? @relation(fields: [courierCompanyId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  sonGiris         DateTime?
+
+  atananGonderiler  Shipment[]         @relation("AtananKurye")
+  denemeler         DeliveryAttempt[]
+  konumlar          CourierLocation[]
+  importBatches     ImportBatch[]
+  auditLogs         AuditLog[]
+  adresKararlari    AddressChangeRequest[] @relation("KararVeren")
+  rotalar           Route[]
+
+  @@index([courierCompanyId])
+}
+
+// ---------- Üyeler ----------
+
+model Member {
+  id                String    @id @default(cuid())
+  sicilNo           String    @unique
+  unvan             String
+  tabelaUnvani      String?
+  yetkiliAdSoyad    String?
+  cepTelefonu       String?
+  isTelefonu        String?
+  eposta            String?
+  meslekGrubu       String?
+  odaBolgeKodu      String?
+  durumTanimi       String?
+  subeAdi           String?
+  rawData           Json?
+  aktif             Boolean   @default(true)
+  lastImportBatchId String?
+  lastImportBatch   ImportBatch? @relation(fields: [lastImportBatchId], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  addresses       MemberAddress[]
+  shipments       Shipment[]
+  adresTalepleri  AddressChangeRequest[]
+
+  @@index([unvan])
+  @@index([aktif])
+}
+
+enum GeoSource {
+  GEOCODE_TAHMIN
+  KURYE_GPS
+  ADMIN_DUZELTME
+}
+
+enum KonumDurumu {
+  YOK
+  TAHMINI
+  DOGRULANDI
+  DOGRULANACAK
+  CAKISMA_BEKLIYOR
+}
+
+model MemberAddress {
+  id                 String       @id @default(cuid())
+  memberId           String
+  member             Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  adresTipi          String?
+  adresMetni         String
+  adresNormalize     String
+  ilce               String?
+  il                 String?
+  isPrimary          Boolean      @default(false)
+  gecerlilikBaslangic DateTime    @default(now())
+  gecerlilikBitis    DateTime?
+
+  geoLat             Float?
+  geoLng             Float?
+  geoAccuracyM       Float?
+  geoSource          GeoSource?
+  konumDurumu        KonumDurumu  @default(YOK)
+  verifiedCount      Int          @default(0)
+  lastVerifiedAt     DateTime?
+  // Çakışma bekleyen aday konum (150 m kuralı)
+  adayLat            Float?
+  adayLng            Float?
+  adayAttemptId      String?
+  kuryeNotu          String?
+
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  shipments          Shipment[]
+
+  @@index([memberId, gecerlilikBitis])
+  @@index([ilce])
+  @@index([konumDurumu])
+}
+
+enum AdresDegisiklikKaynak {
+  EXCEL
+  UYE_SAYFASI
+  KURYE_TASINMIS
+  ADMIN
+}
+
+enum AdresDegisiklikKarar {
+  BEKLIYOR
+  YENI_ADRES
+  AYNI_YER
+  REDDEDILDI
+}
+
+model AddressChangeRequest {
+  id              String                 @id @default(cuid())
+  memberId        String
+  member          Member                 @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  eskiAddressId   String?
+  eskiAdres       String?
+  yeniAdres       String
+  yeniAdresTipi   String?
+  benzerlikSkoru  Float?
+  eskiKonumVarMi  Boolean                @default(false)
+  kaynak          AdresDegisiklikKaynak
+  karar           AdresDegisiklikKarar   @default(BEKLIYOR)
+  kararVerenId    String?
+  kararVeren      User?                  @relation("KararVeren", fields: [kararVerenId], references: [id])
+  kararTarihi     DateTime?
+  importBatchId   String?
+  importBatch     ImportBatch?           @relation(fields: [importBatchId], references: [id])
+  shipmentId      String?
+  shipment        Shipment?              @relation(fields: [shipmentId], references: [id])
+  createdAt       DateTime               @default(now())
+
+  @@index([karar])
+  @@index([importBatchId])
+}
+
+// ---------- Excel yüklemeleri ----------
+
+enum ImportTuru {
+  GENEL_LISTE
+  DAGITIM_LISTESI
+}
+
+enum ImportDurumu {
+  ESLEME_BEKLIYOR
+  ISLENIYOR
+  TAMAMLANDI
+  HATA
+}
+
+model ImportBatch {
+  id            String       @id @default(cuid())
+  tur           ImportTuru
+  dosyaAdi      String
+  dosyaYolu     String?
+  satirSayisi   Int          @default(0)
+  eklenen       Int          @default(0)
+  guncellenen   Int          @default(0)
+  pasifYapilan  Int          @default(0)
+  adresDegisen  Int          @default(0)
+  eslesmeyen    Int          @default(0)
+  esleme        Json?
+  hataRaporu    Json?
+  durum         ImportDurumu @default(ESLEME_BEKLIYOR)
+  yukleyenId    String
+  yukleyen      User         @relation(fields: [yukleyenId], references: [id])
+  campaignId    String?
+  campaign      Campaign?    @relation(fields: [campaignId], references: [id])
+  createdAt     DateTime     @default(now())
+  bitisZamani   DateTime?
+
+  members          Member[]
+  adresTalepleri   AddressChangeRequest[]
+}
+
+// ---------- Dağıtım (kampanya) ve gönderiler ----------
+
+enum KampanyaTuru {
+  DONEMSEL
+  OZEL
+}
+
+enum KampanyaDurumu {
+  TASLAK
+  AKTIF
+  TAMAMLANDI
+}
+
+model Campaign {
+  id                  String          @id @default(cuid())
+  ad                  String
+  tur                 KampanyaTuru    @default(DONEMSEL)
+  planlananBaslangic  DateTime?
+  planlananBitis      DateTime?
+  durum               KampanyaDurumu  @default(TASLAK)
+  courierCompanyId    String?
+  courierCompany      CourierCompany? @relation(fields: [courierCompanyId], references: [id])
+  smsSablonu          String?
+  smsGonderildi       Boolean         @default(false)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  shipments     Shipment[]
+  importBatches ImportBatch[]
+  konumlar      CourierLocation[]
+  rotalar       Route[]
+
+  @@index([durum])
+}
+
+enum GonderiDurumu {
+  BEKLIYOR
+  ATANDI
+  YOLDA
+  TESLIM_EDILDI
+  KOMSUYA_BIRAKILDI
+  ISYERINE_BIRAKILDI
+  ADRESTE_BULUNAMADI
+  ADRES_HATALI
+  TASINMIS
+  UYE_ISTEMEDI
+  IADE
+}
+
+enum UyeTercihi {
+  ISYERINDEYIM
+  EVDEYIM
+  KOMSUYA_BIRAK
+  BASKA_ADRESE
+  ZARF_ISTEMIYORUM
+}
+
+model Shipment {
+  id                String          @id @default(cuid())
+  campaignId        String
+  campaign          Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  memberId          String
+  member            Member          @relation(fields: [memberId], references: [id])
+  memberAddressId   String
+  memberAddress     MemberAddress   @relation(fields: [memberAddressId], references: [id])
+  courierCompanyId  String?
+  courierCompany    CourierCompany? @relation(fields: [courierCompanyId], references: [id])
+  barkod            String?         @unique
+  durum             GonderiDurumu   @default(BEKLIYOR)
+  assignedCourierId String?
+  assignedCourier   User?           @relation("AtananKurye", fields: [assignedCourierId], references: [id])
+  siraNo            Int?
+  atamaTarihi       DateTime?
+
+  token             String          @unique
+  uyeTercihi        UyeTercihi?
+  uyeNotu           String?
+  komsuBilgisi      String?
+  alternatifAdres   String?
+  uygunSaat         String?
+  tercihTarihi      DateTime?
+
+  denemeSayisi      Int             @default(0)
+  sonDenemeAt       DateTime?
+  sonDurumAt        DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  denemeler       DeliveryAttempt[]
+  smsLoglari      SmsLog[]
+  adresTalepleri  AddressChangeRequest[]
+
+  @@unique([campaignId, memberId, memberAddressId])
+  @@index([campaignId, durum])
+  @@index([assignedCourierId, durum])
+  @@index([courierCompanyId])
+}
+
+enum TeslimAlanIliskisi {
+  YETKILI
+  CALISAN
+  KOMSU
+  DIGER
+}
+
+model DeliveryAttempt {
+  id                 String              @id @default(cuid())
+  shipmentId         String
+  shipment           Shipment            @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  courierId          String
+  courier            User                @relation(fields: [courierId], references: [id])
+  sonuc              GonderiDurumu
+  lat                Float?
+  lng                Float?
+  accuracyM          Float?
+  adresMesafesiM     Float?
+  fotoUrls           String[]            @default([])
+  imzaUrl            String?
+  teslimAlanAdi      String?
+  teslimAlanIliskisi TeslimAlanIliskisi?
+  not                String?
+  konumKaydet        Boolean             @default(false)
+  konumSonucu        String?             // KAYDEDILDI | CAKISMA | ATLANDI
+  offlineOlusturuldu Boolean             @default(false)
+  istemciId          String?             @unique  // çevrimdışı tekrar gönderimde çift kayıt önleme
+  cihazZamani        DateTime
+  sunucuZamani       DateTime            @default(now())
+
+  @@index([shipmentId])
+  @@index([courierId, sunucuZamani])
+}
+
+// ---------- Canlı takip ----------
+
+model Route {
+  id         String    @id @default(cuid())
+  courierId  String
+  courier    User      @relation(fields: [courierId], references: [id])
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  baslangic  DateTime  @default(now())
+  bitis      DateTime?
+
+  @@index([courierId, bitis])
+}
+
+model CourierLocation {
+  id         String    @id @default(cuid())
+  courierId  String
+  courier    User      @relation(fields: [courierId], references: [id])
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  lat        Float
+  lng        Float
+  accuracyM  Float?
+  hiz        Float?
+  zaman      DateTime  @default(now())
+
+  @@index([courierId, zaman])
+}
+
+// ---------- SMS ve denetim ----------
+
+enum SmsDurumu {
+  KUYRUKTA
+  GONDERILDI
+  ILETILDI
+  HATA
+}
+
+model SmsLog {
+  id               String     @id @default(cuid())
+  shipmentId       String?
+  shipment         Shipment?  @relation(fields: [shipmentId], references: [id])
+  telefon          String
+  sablon           String
+  mesaj            String
+  saglayici        String?
+  saglayiciMesajId String?
+  durum            SmsDurumu  @default(KUYRUKTA)
+  hata             String?
+  createdAt        DateTime   @default(now())
+
+  @@index([shipmentId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  islem     String
+  varlik    String
+  varlikId  String?
+  detay     Json?
+  createdAt DateTime @default(now())
+
+  @@index([varlik, varlikId])
+  @@index([createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
