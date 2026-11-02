@@ -32,7 +32,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest imajında Android SDK (platform 34, build-tools) hazır gelir; ANDROID_HOME tanımlıdır.
       - run: pnpm install --frozen-lockfile
       - name: Web paketini derle
         working-directory: apps/kurye
