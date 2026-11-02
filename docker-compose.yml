@@ -1,0 +1,107 @@
+# Üye Zarf Dağıtım Sistemi — tek VPS kurulumu
+# Kullanım: cp .env.example .env && (değerleri düzenle) && docker compose up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dagitim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
+      POSTGRES_DB: ${POSTGRES_DB:-dagitim}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dagitim}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_REALTIME_URL: https://${REALTIME_DOMAIN}
+        NEXT_PUBLIC_APP_URL: https://${APP_DOMAIN}
+        NEXT_PUBLIC_KURYE_URL: https://${KURYE_DOMAIN}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dagitim}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dagitim}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET gerekli}
+      STORAGE_DIR: /data/storage
+      ODA_ADI: ${ODA_ADI:-Ticaret Odası}
+      GEOCODING_API_KEY: ${GEOCODING_API_KEY:-}
+    volumes:
+      - storage:/data/storage
+
+  realtime:
+    build:
+      context: .
+      dockerfile: apps/realtime/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dagitim}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dagitim}
+      AUTH_SECRET: ${AUTH_SECRET}
+      PORT: 3001
+      CORS_ORIGIN: https://${APP_DOMAIN},https://${KURYE_DOMAIN}
+
+  kurye:
+    build:
+      context: .
+      dockerfile: apps/kurye/Dockerfile
+      args:
+        VITE_API_URL: https://${APP_DOMAIN}
+        VITE_REALTIME_URL: https://${REALTIME_DOMAIN}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      KURYE_DOMAIN: ${KURYE_DOMAIN}
+      REALTIME_DOMAIN: ${REALTIME_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, realtime, kurye]
+
+  # Günlük yedek: pg_dump + dosya deposu tar; 14 gün saklar
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on: [postgres]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:-dagitim}
+      POSTGRES_DB: ${POSTGRES_DB:-dagitim}
+    volumes:
+      - storage:/data/storage:ro
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          TS=$$(date +%Y%m%d-%H%M)
+          pg_dump -h postgres -U $$POSTGRES_USER $$POSTGRES_DB | gzip > /backups/db-$$TS.sql.gz
+          tar czf /backups/storage-$$TS.tgz -C /data storage
+          find /backups -type f -mtime +14 -delete
+          echo "yedek alındı $$TS"
+          sleep 86400
+        done
+
+volumes:
+  pgdata:
+  storage:
+  caddy_data:
+  caddy_config:

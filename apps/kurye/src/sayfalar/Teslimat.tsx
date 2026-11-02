@@ -41,8 +41,10 @@ export function Teslimat() {
     const c = canvasRef.current;
     const oran = Math.max(window.devicePixelRatio || 1, 1);
     c.width = c.offsetWidth * oran; c.height = c.offsetHeight * oran; c.getContext("2d")!.scale(oran, oran);
-    const pad = new SignaturePad(c, { penColor: "#111827" });
-    pad.addEventListener("endStroke", () => setImzaVar(!pad.isEmpty()));
+    const pad = new SignaturePad(c, { penColor: "#111827", minDistance: 1 });
+    const guncelle = () => setImzaVar(!pad.isEmpty());
+    pad.addEventListener("endStroke", guncelle);
+    pad.addEventListener("beginStroke", guncelle);
     padRef.current = pad;
     return () => pad.off();
   }, [teslim]);
@@ -61,7 +63,8 @@ export function Teslimat() {
     if (!sonuc) return setHata("Sonuç seçin.");
     if (!fotolar.length) return setHata("En az bir fotoğraf çekin (kanıt).");
     if (teslim && !teslimAlan.trim()) return setHata("Teslim alan kişinin adını yazın.");
-    if (teslim && !imzaVar) return setHata("Teslim alan kişiden imza alın.");
+    const imzaBos = !padRef.current || padRef.current.isEmpty();
+    if (teslim && imzaBos && !imzaVar) return setHata("Teslim alan kişiden imza alın.");
     setGonderiliyor(true);
     const dosyalar: { blob: Blob; tur: "foto" | "imza" }[] = fotolar.map((b) => ({ blob: b, tur: "foto" as const }));
     if (teslim && padRef.current && !padRef.current.isEmpty()) {

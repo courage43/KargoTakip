@@ -1,0 +1,20 @@
+# Otomatik Let's Encrypt. Alan adlarının DNS A kayıtları sunucuya işaret etmeli.
+{$APP_DOMAIN} {
+	encode gzip
+	reverse_proxy web:3000
+}
+
+{$KURYE_DOMAIN} {
+	encode gzip
+	# Kurye PWA statik dosyaları; /api istekleri web'e
+	handle /api/* {
+		reverse_proxy web:3000
+	}
+	handle {
+		reverse_proxy kurye:80
+	}
+}
+
+{$REALTIME_DOMAIN} {
+	reverse_proxy realtime:3001
+}
