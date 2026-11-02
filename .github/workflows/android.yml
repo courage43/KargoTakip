@@ -15,6 +15,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_GOOGLE_SERVICES: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -34,7 +37,7 @@ jobs:
           test -n "$VITE_API_URL" || { echo "VITE_API_URL repo variable tanımlı değil"; exit 1; }
           pnpm build
       - name: google-services.json (varsa)
-        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        if: env.HAS_GOOGLE_SERVICES == 'true'
         working-directory: apps/kurye
         run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > android/app/google-services.json
       - name: Capacitor sync
@@ -48,7 +51,7 @@ jobs:
           name: kurye-apk
           path: apps/kurye/android/app/build/outputs/apk/debug/app-debug.apk
       - name: İmzalı sürüm (keystore varsa)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.HAS_KEYSTORE == 'true'
         working-directory: apps/kurye/android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -62,7 +65,7 @@ jobs:
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
       - uses: actions/upload-artifact@v4
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.HAS_KEYSTORE == 'true'
         with:
           name: kurye-release
           path: |
