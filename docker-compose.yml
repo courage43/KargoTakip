@@ -85,7 +85,7 @@ services:
 
   # Dakikada bir: SMS kuyruğu + teslim raporu, geocode kuyruğu, uzun rota kapatma, eski konum temizliği
   cron:
-    image: curlimages/curl:8.11.1
+    image: node:22-alpine
     restart: unless-stopped
     depends_on: [web]
     environment:
@@ -94,7 +94,7 @@ services:
     command:
       - |
         while true; do
-          curl -sS -m 300 "http://web:3000/api/cron/bakim?key=$$CRON_KEY" || true
+          wget -q -T 300 -O - "http://web:3000/api/cron/bakim?key=$$CRON_KEY" || true
           echo
           sleep 60
         done

@@ -2,6 +2,8 @@
 
 Oda üyelerine kurye ile gönderilen zarfların dağıtımını ve teslimatını takip eden sistem: Excel'den üye ve dağıtım listesi yükleme, kurye firmasına atama, kuryeler için mobil uygulama (GPS + fotoğraf + imza), üye tercih sayfası, canlı harita ve **her teslimatta doğrulanan konum** sayesinde bir sonraki dağıtımda nokta atışı yönlendirme.
 
+> **Kendi bilgisayarınızda denemek için:** [BILGISAYARDA-DENE.md](BILGISAYARDA-DENE.md). Docker Desktop kurup tek komutla açılır; örnek Excel dosyaları `ornekler/` klasöründedir.
+
 ## Bileşenler
 
 | Dizin | Ne | Teknoloji |

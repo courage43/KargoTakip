@@ -57,7 +57,7 @@ export async function oturumCerezYaz(o: Oturum) {
   c.set(COOKIE, await tokenUret(o), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "1" : process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 7 * 24 * 3600,
   });

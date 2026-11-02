@@ -1,4 +1,5 @@
 FROM node:22-alpine AS deps
+RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc tsconfig.base.json ./
@@ -20,18 +21,21 @@ ENV NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL NEXT_PUBLIC_APP_URL=$NEXT
 RUN pnpm --filter @dagitim/web build
 
 FROM node:22-alpine AS runner
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
-# Prisma CLI ve şema: konteyner açılışında migrate deploy için
+# Prisma CLI (kendi bağımlılıklarıyla ayrı klasörde) ve şema: konteyner açılışında migrate deploy için
+ARG PRISMA_VERSION=6.19.3
+RUN npm install --no-save --no-audit --no-fund --prefix /opt/prisma prisma@${PRISMA_VERSION} && npm cache clean --force
 COPY --from=build /app/packages/db/prisma ./packages/db/prisma
-COPY --from=build /app/node_modules/prisma ./node_modules/prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY apps/web/docker-entrypoint.sh /entrypoint.sh
+COPY apps/web/docker-seed.cjs /app/docker-seed.cjs
 RUN chmod +x /entrypoint.sh && mkdir -p /data/storage
 EXPOSE 3000
 ENTRYPOINT ["/entrypoint.sh"]

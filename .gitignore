@@ -16,3 +16,4 @@ apps/kurye/android/build/
 apps/kurye/android/.gradle/
 apps/kurye/android/app/google-services.json
 apps/kurye/android/release.keystore
+.ca-test/
