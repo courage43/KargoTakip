@@ -69,12 +69,15 @@ node tools/e2e.mjs /tmp                                 # uçtan uca akış (web
 
 **Teslimat** → kurye sonucu seçer (Teslim edildi / İş yerine bırakıldı / Komşuya bırakıldı / Adreste bulunamadı / Adres hatalı / Taşınmış), fotoğraf zorunlu, teslimde ad + imza zorunlu, GPS otomatik. "Konumu kaydet" işaretliyse adres `DOGRULANDI` olur; doğrulanmış konumdan 150 m'den uzak yeni GPS otomatik ezilmez, **Konum Çakışmaları** ekranına düşer.
 
+**SMS** → Dağıtım aktif olunca SMS kartında "Üyelere tercih SMS'i gönder". Cep telefonu olmayan üyeler atlanır, her gönderiye bir kez gider. Mesajdaki link üyeyi `/t/{token}` tercih sayfasına götürür. Ayarlar'da "kurye yolda" açıksa kurye "Rotaya başla" dediğinde o günkü üyelere ikinci SMS gider.
+
 **Canlı takip** → kurye "Rotaya başla" dediği sürece 30 sn'de bir konum gönderir; `/admin/canli` ve dağıtım sayfasındaki harita canlı güncellenir. Rota kapalıyken konum alınmaz.
 
 ## Fazlar
 
 - **Faz 1 (bu sürüm):** yukarıdakilerin hepsi + çevrimdışı kurye kuyruğu + Excel dışa aktarım + denetim kaydı.
-- **Faz 2:** Netgsm SMS gönderimi ve teslim raporu (üye tercih sayfası hazır, SMS tetikleyici eklenecek), adres metninden ilk konum tahmini (geocoding), rota izi / gün sonu oynatma, anomali listesi.
+- **Faz 2a (bu sürüm):** SMS bildirimi. Dağıtım sayfasındaki SMS kartından üyelere tercih linki gönderilir; isteğe bağlı "kurye yolda" SMS'i; SMS listesi, teslim raporu, Excel. Sağlayıcı `SMS_SAGLAYICI=netgsm` + `NETGSM_USERCODE/PASSWORD` ile Netgsm, varsayılan `sahte` (gerçek gönderim yapmaz, test için). Başlık ve şablonlar Ayarlar > SMS'te. `cron` servisi dakikada bir kuyruğu işler.
+- **Faz 2b:** adres metninden ilk konum tahmini (geocoding), rota izi / gün sonu oynatma, anomali listesi.
 - **Faz 3:** Capacitor ile Play Store / App Store paketi (arka planda konum), push bildirimi, rota sıralama, zarf barkodu.
 
 ## Notlar

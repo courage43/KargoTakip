@@ -237,6 +237,7 @@ model Campaign {
   courierCompanyId    String?
   courierCompany      CourierCompany? @relation(fields: [courierCompanyId], references: [id])
   smsSablonu          String?
+  smsYoldaSablonu     String?
   smsGonderildi       Boolean         @default(false)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -245,6 +246,7 @@ model Campaign {
   importBatches ImportBatch[]
   konumlar      CourierLocation[]
   rotalar       Route[]
+  smsLoglari    SmsLog[]
 
   @@index([durum])
 }
@@ -388,16 +390,23 @@ model SmsLog {
   id               String     @id @default(cuid())
   shipmentId       String?
   shipment         Shipment?  @relation(fields: [shipmentId], references: [id])
+  campaignId       String?
+  campaign         Campaign?  @relation(fields: [campaignId], references: [id])
   telefon          String
   sablon           String
   mesaj            String
+  parcaSayisi      Int        @default(1)
   saglayici        String?
   saglayiciMesajId String?
   durum            SmsDurumu  @default(KUYRUKTA)
   hata             String?
+  gonderimZamani   DateTime?
+  raporZamani      DateTime?
   createdAt        DateTime   @default(now())
 
   @@index([shipmentId])
+  @@index([campaignId, durum])
+  @@index([durum, createdAt])
 }
 
 model AuditLog {

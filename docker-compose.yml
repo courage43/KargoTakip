@@ -34,6 +34,10 @@ services:
       STORAGE_DIR: /data/storage
       ODA_ADI: ${ODA_ADI:-Ticaret Odası}
       GEOCODING_API_KEY: ${GEOCODING_API_KEY:-}
+      SMS_SAGLAYICI: ${SMS_SAGLAYICI:-sahte}
+      NETGSM_USERCODE: ${NETGSM_USERCODE:-}
+      NETGSM_PASSWORD: ${NETGSM_PASSWORD:-}
+      CRON_KEY: ${CRON_KEY:?CRON_KEY gerekli}
     volumes:
       - storage:/data/storage
 
@@ -75,6 +79,22 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [web, realtime, kurye]
+
+  # Dakikada bir SMS kuyruğunu işler ve teslim raporlarını çeker
+  cron:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    depends_on: [web]
+    environment:
+      CRON_KEY: ${CRON_KEY}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -sS -m 120 "http://web:3000/api/cron/sms?key=$$CRON_KEY" || true
+          echo
+          sleep 60
+        done
 
   # Günlük yedek: pg_dump + dosya deposu tar; 14 gün saklar
   backup:

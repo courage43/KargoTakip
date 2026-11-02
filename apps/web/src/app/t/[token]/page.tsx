@@ -23,6 +23,7 @@ export default async function UyeSayfasi({ params }: { params: Promise<{ token: 
         {teslimEdildi ? <p className="text-sm text-green-700">Zarfınız teslim edilmiştir. Teşekkür ederiz.</p> : (
           <>
             <p className="text-sm text-gray-700">Zarfınız kurye ile yukarıdaki adrese teslim edilecektir. Kuryenin size kolay ulaşması için teslimat tercihinizi bildirin.</p>
+            <p className="text-xs text-gray-500">Bu bağlantı size {oda?.value ?? "Oda"} tarafından SMS ile gönderilmiştir; yalnızca sizin gönderinize aittir.</p>
             <UyeTercihFormu token={token} mevcut={g.uyeTercihi} />
           </>
         )}

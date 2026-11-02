@@ -79,6 +79,54 @@ await ap.click("button:has-text('Dağıtımı başlat')");
 await ap.waitForSelector("text=Aktif");
 log("kampanya aktif");
 
+// --- 2b. SMS ayarları, test SMS, tercih SMS'i (sahte sağlayıcı) ---
+await ap.goto(`${WEB}/admin/ayarlar`);
+await ap.fill("input[name=SMS_BASLIK]", "TESTODA");
+await ap.fill("input[name=SMS_BIRIM_FIYAT]", "0.35");
+await ap.check("input[name=SMS_KURYE_YOLDA]");
+await ap.click("button:has-text('SMS ayarlarını kaydet')");
+await ap.waitForLoadState("networkidle");
+assert.equal((await q(`select value from "Setting" where key='SMS_KURYE_YOLDA'`))[0].value, "1");
+await ap.fill("input[placeholder='05xx xxx xx xx']", "0532 111 22 33");
+await ap.click("button:has-text('Gönder')");
+await ap.waitForSelector("text=Gönderildi (sahte");
+assert.equal((await q(`select count(*)::int c from "SmsLog" where sablon='TEST'`))[0].c, 1);
+log("SMS ayarları kaydedildi, test SMS gönderildi");
+// bir gönderiyi 'üye istemedi' yap → SMS gitmemeli
+const istemeyen = (await q(`select id from "Shipment" where "campaignId"=$1 order by id limit 1`, [campaignId]))[0].id;
+await db.query(`update "Shipment" set durum='UYE_ISTEMEDI' where id=$1`, [istemeyen]);
+await ap.goto(`${WEB}/admin/dagitimlar/${campaignId}`);
+await ap.waitForSelector("text=Üye SMS bildirimi");
+ap.once("dialog", (d) => d.accept());
+await ap.click("button:has-text(\"tercih SMS'i gönder (299)\")");
+await ap.waitForSelector("text=SMS kuyruğa alındı");
+for (let i = 0; i < 40; i++) { const k = (await q(`select count(*)::int c from "SmsLog" where "campaignId"=$1 and durum='KUYRUKTA'`, [campaignId]))[0].c; if (!k) break; await new Promise((r) => setTimeout(r, 500)); }
+const smsDurum = await q(`select durum, count(*)::int c from "SmsLog" where "campaignId"=$1 and sablon='TERCIH' group by durum`, [campaignId]);
+assert.deepEqual(Object.fromEntries(smsDurum.map((x) => [x.durum, x.c])), { GONDERILDI: 299 }, "299 tercih SMS'i gönderilmeli (üye istemedi hariç)");
+assert.equal((await q(`select count(*)::int c from "SmsLog" where "shipmentId"=$1`, [istemeyen]))[0].c, 0);
+await ap.reload(); await ap.waitForSelector("text=Üye SMS bildirimi");
+assert.ok(await ap.locator("button:has-text(\"tercih SMS'i gönder (0)\")").isDisabled(), "ikinci gönderim mümkün olmamalı");
+// cron: yanlış anahtar 401, doğru anahtar raporları ILETILDI yapar
+assert.equal((await fetch(`${WEB}/api/cron/sms?key=yanlis`)).status, 401);
+const cron = await (await fetch(`${WEB}/api/cron/sms?key=test-cron-key`)).json();
+assert.equal(cron.ok, true); assert.ok(cron.raporGuncellenen >= 200, `rapor güncellenen: ${cron.raporGuncellenen}`);
+await fetch(`${WEB}/api/cron/sms?key=test-cron-key`);
+assert.equal((await q(`select count(*)::int c from "SmsLog" where "campaignId"=$1 and sablon='TERCIH' and durum='ILETILDI'`, [campaignId]))[0].c, 299);
+// SMS içindeki link çalışıyor
+const smsMesaj = (await q(`select mesaj from "SmsLog" where "campaignId"=$1 and sablon='TERCIH' limit 1`, [campaignId]))[0].mesaj;
+const link = smsMesaj.match(/https?:\/\/\S+/)[0];
+assert.ok(smsMesaj.includes("TESTODA") || smsMesaj.includes("Ticaret Odası"), smsMesaj);
+const lp = await admin.newPage(); await lp.goto(link); await lp.waitForSelector("text=Tercihimi kaydet"); await lp.close();
+// hatalı yeniden kuyrukla
+await db.query(`update "SmsLog" set durum='HATA', hata='test hatası' where id = (select id from "SmsLog" where "campaignId"=$1 limit 1)`, [campaignId]);
+await ap.goto(`${WEB}/admin/dagitimlar/${campaignId}/sms`);
+await ap.click("button:has-text('Hatalıları yeniden gönder (1)')");
+await ap.waitForLoadState("networkidle");
+for (let i = 0; i < 20; i++) { const k = (await q(`select count(*)::int c from "SmsLog" where "campaignId"=$1 and durum in ('KUYRUKTA','HATA')`, [campaignId]))[0].c; if (!k) break; await new Promise((r) => setTimeout(r, 500)); }
+assert.equal((await q(`select count(*)::int c from "SmsLog" where "campaignId"=$1 and durum='HATA'`, [campaignId]))[0].c, 0);
+assert.equal((await ap.request.get(`${WEB}/api/export/sms/${campaignId}`)).status(), 200);
+log("tercih SMS'i: 299 gönderildi → iletildi, link açıldı, hatalı yeniden gönderildi, Excel indi");
+
 // --- 3. Firma yöneticisi atama ---
 const firma = await browser.newContext(); const fp = await firma.newPage();
 await fp.goto(`${WEB}/giris`); await fp.fill("#eposta", "firma@kurye.local"); await fp.fill("#sifre", "Firma123!"); await fp.click("form button");
@@ -87,21 +135,22 @@ await fp.click(`a[href="/firma/dagitimlar/${campaignId}"]`);
 await fp.waitForSelector("text=gönderi seçili");
 await fp.selectOption("select.w-40 >> nth=0", "Kadıköy"); // ilçe
 await fp.click("button:has-text('Filtredekileri seç')");
-await fp.waitForSelector("text=30 gönderi seçili");
+await fp.waitForSelector("text=/(29|30) gönderi seçili/");
 const kuryeSel = fp.locator("select.w-56");
 const ahmet = (await q(`select id from "User" where telefon='5550000001'`))[0].id;
 await kuryeSel.selectOption(ahmet);
 await fp.click("button:has-text('Kuryeye ata')");
-await fp.waitForSelector("text=30 gönderi Ahmet Kurye kuryesine atandı");
+await fp.waitForSelector("text=/(29|30) gönderi Ahmet Kurye kuryesine atandı/");
 // haritasız (konum yok) olduğu için listeden; ikinci parti: Üsküdar → Mehmet
 await fp.selectOption("select.w-40 >> nth=0", "Üsküdar");
 await fp.click("button:has-text('Filtredekileri seç')");
 const mehmet = (await q(`select id from "User" where telefon='5550000002'`))[0].id;
 await kuryeSel.selectOption(mehmet);
 await fp.click("button:has-text('Kuryeye ata')");
-await fp.waitForSelector("text=30 gönderi Mehmet Kurye kuryesine atandı");
-assert.equal((await q(`select count(*)::int c from "Shipment" where "assignedCourierId"=$1 and durum='ATANDI'`, [ahmet]))[0].c, 30);
-log("firma: 30 Kadıköy → Ahmet, 30 Üsküdar → Mehmet");
+await fp.waitForSelector("text=/(29|30) gönderi Mehmet Kurye kuryesine atandı/");
+const ahmetAdet = (await q(`select count(*)::int c from "Shipment" where "assignedCourierId"=$1 and durum='ATANDI'`, [ahmet]))[0].c;
+assert.ok(ahmetAdet >= 29 && ahmetAdet <= 30);
+log(`firma: ${ahmetAdet} Kadıköy → Ahmet, Üsküdar → Mehmet`);
 
 // --- 4. Kurye API ---
 const api = async (yol, body, token) => {
@@ -112,13 +161,17 @@ const giris = await api("/api/auth/kurye-login", { telefon: "05550000001", pin: 
 assert.equal(giris.status, 200); const tok = giris.data.token;
 assert.equal((await api("/api/auth/kurye-login", { telefon: "05550000001", pin: "0000" })).status, 401);
 let liste = await api("/api/kurye/gonderiler", null, tok);
-assert.equal(liste.data.gonderiler.length, 30);
+assert.equal(liste.data.gonderiler.length, ahmetAdet);
 assert.ok(liste.data.gonderiler.every((g) => g.adres.ilce === "Kadıköy"));
-log("kurye API: giriş, 30 gönderi listelendi");
+log(`kurye API: giriş, ${ahmetAdet} gönderi listelendi`);
 const rota = await api("/api/kurye/rota", { islem: "baslat" }, tok); assert.equal(rota.data.rotaAcik, true);
 const konum = await api("/api/kurye/konum", { lat: 40.99, lng: 29.03, accuracyM: 12 }, tok); assert.equal(konum.data.ok, true);
 assert.equal((await q(`select count(*)::int c from "CourierLocation"`))[0].c, 1);
-assert.equal((await q(`select count(*)::int c from "Shipment" where "assignedCourierId"=$1 and durum='YOLDA'`, [ahmet]))[0].c, 30);
+for (let i = 0; i < 40; i++) { const k = (await q(`select count(*)::int c from "SmsLog" where sablon='YOLDA' and durum='KUYRUKTA'`))[0].c; if (!k) break; await new Promise((r) => setTimeout(r, 500)); }
+const yoldaAdet = (await q(`select count(*)::int c from "SmsLog" s join "Shipment" g on g.id=s."shipmentId" where s.sablon='YOLDA' and g."assignedCourierId"=$1`, [ahmet]))[0].c;
+assert.ok(yoldaAdet >= 29 && yoldaAdet <= 30, `yolda SMS: ${yoldaAdet}`);
+log(`"kurye yolda" SMS'i kuyruklandı ve gönderildi: ${yoldaAdet}`);
+assert.equal((await q(`select count(*)::int c from "Shipment" where "assignedCourierId"=$1 and durum='YOLDA'`, [ahmet]))[0].c, ahmetAdet);
 log("rota başladı, konum yazıldı, gönderiler YOLDA");
 
 const g1 = liste.data.gonderiler[0], g2 = liste.data.gonderiler[1], g3 = liste.data.gonderiler[2];
@@ -157,6 +210,10 @@ log("yetki: başka kuryenin gönderisi reddedildi, tokensiz 401");
 await api("/api/kurye/rota", { islem: "bitir" }, tok);
 assert.equal((await api("/api/kurye/konum", { lat: 1, lng: 1 }, tok)).data.rotaAcik, false);
 log("rota bitti, konum artık yazılmıyor");
+await api("/api/kurye/rota", { islem: "baslat" }, tok); await new Promise((r) => setTimeout(r, 1000)); await api("/api/kurye/rota", { islem: "bitir" }, tok);
+const yoldaTekrar = (await q(`select count(*)::int c from "SmsLog" s join "Shipment" g on g.id=s."shipmentId" where s.sablon='YOLDA' and g."assignedCourierId"=$1`, [ahmet]))[0].c;
+assert.equal(yoldaTekrar, yoldaAdet, "rota tekrar başlatılınca yolda SMS'i tekrar gitmemeli");
+log("rota tekrar başlatıldı: yolda SMS'i tekrar gönderilmedi (idempotent)");
 
 // --- 5. Üye tercih sayfası ---
 const tokenG = (await q(`select token from "Shipment" where id=$1`, [g2.id]))[0].token;

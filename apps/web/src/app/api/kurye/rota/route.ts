@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { yayinla } from "@/lib/notify";
 import { json, options, kuryeGerekli } from "@/lib/api";
+import { kampanyaSmsKuyrukla, isleyiciTetikle } from "@/lib/sms/kuyruk";
+import { smsAyarlari } from "@/lib/sms";
 
 export const OPTIONS = options;
 
@@ -13,6 +15,14 @@ export async function POST(req: Request) {
     if (acik) return json({ rotaAcik: true, rotaId: acik.id });
     const g = await prisma.shipment.findFirst({ where: { assignedCourierId: o.sub, durum: { in: ["ATANDI", "YOLDA"] } }, select: { campaignId: true } });
     const r = await prisma.route.create({ data: { courierId: o.sub, campaignId: g?.campaignId ?? null } });
+    // "Kurye yolda" SMS'i (ayar açıksa, gönderi başına bir kez) — durum YOLDA'ya çekilmeden önce kuyruklanır
+    try {
+      if ((await smsAyarlari()).kuryeYolda) {
+        const kampanyalar = await prisma.shipment.findMany({ where: { assignedCourierId: o.sub, durum: "ATANDI" }, select: { campaignId: true }, distinct: ["campaignId"] });
+        for (const k of kampanyalar) await kampanyaSmsKuyrukla(k.campaignId, "YOLDA", { courierId: o.sub });
+        if (kampanyalar.length) isleyiciTetikle();
+      }
+    } catch (e) { console.error("yolda SMS kuyruklama hatası", e); }
     await prisma.shipment.updateMany({ where: { assignedCourierId: o.sub, durum: "ATANDI" }, data: { durum: "YOLDA", sonDurumAt: new Date() } });
     await yayinla("route", { tip: "baslangic", courierId: o.sub, ad: o.ad, companyId: o.companyId, campaignId: g?.campaignId });
     return json({ rotaAcik: true, rotaId: r.id });

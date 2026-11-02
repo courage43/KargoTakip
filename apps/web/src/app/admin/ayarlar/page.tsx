@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
 import { firmaEkle, kullaniciEkle, kullaniciAktiflik, ayarKaydet } from "@/app/actions/admin";
+import { smsAyarKaydet } from "@/app/actions/sms";
+import { SmsTest } from "@/components/SmsTest";
+import { saglayiciAdi } from "@/lib/sms";
 import { ROL_ETIKET } from "@dagitim/shared";
 import { tarih } from "@/lib/format";
 
@@ -20,10 +23,24 @@ export default async function Ayarlar() {
           <div><label className="label">Oda adı</label><input name="ODA_ADI" defaultValue={ayar.ODA_ADI ?? ""} className="input" /></div>
           <div><label className="label">Kurye navigasyon uygulaması</label>
             <select name="NAVIGASYON" defaultValue={ayar.NAVIGASYON ?? "google"} className="input"><option value="google">Google Maps</option><option value="yandex">Yandex Navi</option><option value="apple">Apple Haritalar</option></select></div>
-          <div className="md:col-span-2"><label className="label">Varsayılan SMS şablonu ({"{ODA}"}, {"{TARIH}"}, {"{LINK}"} değişkenleri)</label>
-            <textarea name="SMS_SABLON_VARSAYILAN" rows={2} className="input" defaultValue={ayar.SMS_SABLON_VARSAYILAN ?? "{ODA} zarfınız {TARIH} tarihlerinde kurye ile teslim edilecektir. Teslimat tercihinizi bildirmek için: {LINK}"} /></div>
           <div><button className="btn-primary">Kaydet</button></div>
         </form>
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <h2 className="font-semibold">SMS</h2>
+        <p className="text-xs text-gray-600">Aktif sağlayıcı: <b>{saglayiciAdi()}</b> (sunucu ortam değişkeni <code>SMS_SAGLAYICI</code>; Netgsm için <code>NETGSM_USERCODE</code> ve <code>NETGSM_PASSWORD</code>). Değişkenler: {"{ODA}"} oda adı, {"{TARIH}"} planlanan tarih aralığı, {"{LINK}"} üye tercih linki, {"{UNVAN}"} firma unvanı. Türkçe karakter kullanılırsa bir SMS 155 karakterdir.</p>
+        <form action={smsAyarKaydet} className="grid md:grid-cols-2 gap-3">
+          <div><label className="label">SMS başlığı (Netgsm'de onaylı gönderici adı)</label><input name="SMS_BASLIK" defaultValue={ayar.SMS_BASLIK ?? ""} className="input" maxLength={11} placeholder="ODAADI" /></div>
+          <div><label className="label">SMS birim fiyatı (₺, maliyet tahmini için)</label><input name="SMS_BIRIM_FIYAT" type="number" step="0.01" defaultValue={ayar.SMS_BIRIM_FIYAT ?? ""} className="input" /></div>
+          <div className="md:col-span-2"><label className="label">Tercih SMS'i şablonu (dağıtım başlarken)</label>
+            <textarea name="SMS_SABLON_VARSAYILAN" rows={2} className="input" defaultValue={ayar.SMS_SABLON_VARSAYILAN ?? "{ODA} zarfınız {TARIH} kurye ile teslim edilecektir. Teslimat tercihinizi bildirmek için: {LINK}"} /></div>
+          <div className="md:col-span-2"><label className="label">"Kurye yolda" SMS'i şablonu</label>
+            <textarea name="SMS_SABLON_YOLDA" rows={2} className="input" defaultValue={ayar.SMS_SABLON_YOLDA ?? "{ODA} zarfınız bugün kurye ile teslim edilecektir. Tercihinizi güncellemek için: {LINK}"} /></div>
+          <label className="flex items-center gap-2 text-sm md:col-span-2"><input type="checkbox" name="SMS_KURYE_YOLDA" defaultChecked={ayar.SMS_KURYE_YOLDA === "1"} /> Kurye "Rotaya başla" dediğinde o günkü üyelere "kurye yolda" SMS'i gönder (gönderi başına bir kez, ek maliyet)</label>
+          <div><button className="btn-primary">SMS ayarlarını kaydet</button></div>
+        </form>
+        <SmsTest />
       </section>
 
       <section className="card p-4 space-y-3">
