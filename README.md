@@ -90,7 +90,7 @@ Kurye uygulaması hem tarayıcıdan (PWA) hem mağaza paketi olarak çalışır;
 
 **APK'yı GitHub Actions ile almak (önerilen, bilgisayara kurulum gerekmez)**
 1. Depoda Settings → Secrets and variables → Actions → **Variables**: `VITE_API_URL` = `https://APP_DOMAIN`, `VITE_REALTIME_URL` = `https://REALTIME_DOMAIN`.
-2. Actions → "Android APK" → Run workflow. Bitince Artifacts bölümünden `kurye-apk` (app-debug.apk) indirilir; kurye telefonlarına doğrudan kurulabilir (bilinmeyen kaynaklara izin).
+2. Actions → "Android APK" → Run workflow (adresleri formdan da girebilirsiniz). Bitince Artifacts bölümünden `kurye-apk` (app-debug.apk) indirilir; kurye telefonlarına doğrudan kurulabilir (bilinmeyen kaynaklara izin). Değişkenler tanımlanmadan çalışan derlemeler "VITE_API_URL tanımlı değil" hatasıyla durur; bu beklenen bir uyarıdır.
 3. Play Store için imzalı sürüm: bir kez `keytool -genkeypair -v -keystore release.keystore -alias kurye -keyalg RSA -keysize 2048 -validity 10000` ile anahtar üretin; `base64 -w0 release.keystore` çıktısını `KEYSTORE_BASE64`, şifreleri `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` secret'larına girin. İş akışı `kurye-release` artefaktında imzalı APK ve AAB üretir. **Anahtarı saklayın**; kaybolursa mağazada güncelleme yapılamaz.
 4. Push bildirimi için Firebase projesi açın, Android uygulaması (`tr.org.oda.dagitimkurye`) ekleyin, `google-services.json` dosyasını base64 ile `GOOGLE_SERVICES_JSON` secret'ına koyun; sunucu tarafında servis hesabı JSON'unu `FIREBASE_SERVICE_ACCOUNT_JSON` env'ine (base64) girin. Firebase yoksa uygulama çalışır, yalnızca bildirim gitmez.
 
